@@ -4,7 +4,6 @@ A powerful local LLM ensemble system that runs multiple language models in paral
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux-lightgrey.svg)
 
 ## Features
 
@@ -102,6 +101,212 @@ pip install -r requirements.txt
 # Test ensemble system
 python -m ensemble_llm.main "Hello, how are you?"
 ```
+
+
+## Windows Installation and Setup 🪟
+
+### Prerequisites
+
+1. **Python 3.8+**
+   - Download from [python.org](https://python.org)
+   - ✅ **Important**: Check "Add Python to PATH" during installation
+
+2. **Ollama for Windows**
+   - Download from [ollama.ai/download/windows](https://ollama.ai/download/windows)
+   - Run the installer (requires Windows 10/11)
+
+3. **Git for Windows** (optional but recommended)
+   - Download from [git-scm.com](https://git-scm.com)
+
+4. **NVIDIA GPU** (optional but recommended)
+   - Install [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) for GPU acceleration
+   - Ensure you have the latest NVIDIA drivers
+
+### Quick Setup (Windows)
+
+1. **Clone or download the repository**
+```powershell
+# Using Git
+git clone https://github.com/yourusername/ensemble-llm.git
+cd ensemble-llm
+
+# Or download and extract the ZIP file from GitHub
+```
+
+2. **Run the Windows setup script**
+```powershell
+# In PowerShell or Command Prompt
+scripts\setup_windows.bat
+```
+
+This will:
+- Check Python and Ollama installation
+- Create virtual environment
+- Install all dependencies
+- Create necessary directories
+
+3. **Start Ollama with GPU optimization**
+```powershell
+scripts\start_ollama_windows.bat
+```
+
+4. **Pull models**
+```powershell
+# Activate virtual environment
+venv\Scripts\activate
+
+# Pull recommended models for GPU
+ollama pull llama3.2:3b
+ollama pull phi3.5
+ollama pull qwen2.5:7b
+ollama pull mistral:7b-instruct-q4_K_M
+```
+
+### Running on Windows
+
+#### Basic Usage
+```powershell
+# Activate virtual environment
+venv\Scripts\activate
+
+# Run a query
+python -m ensemble_llm.main "Your question here"
+
+# With GPU optimization
+set OLLAMA_NUM_GPU=999
+python -m ensemble_llm.main --speed fast "Your question"
+
+# Interactive mode
+python -m ensemble_llm.main -i
+```
+
+#### PowerShell Alias (Optional)
+Add to your PowerShell profile (`$PROFILE`):
+```powershell
+function ensemble {
+    & "$env:USERPROFILE\ensemble-llm\venv\Scripts\python.exe" -m ensemble_llm.main $args
+}
+```
+
+Then use: `ensemble "Your question"`
+
+### GPU Optimization (Windows)
+
+#### Check GPU Status
+```powershell
+# Run the benchmark script
+python scripts\benchmark_windows.py
+```
+
+#### Environment Variables for GPU
+```powershell
+# Set these before running for maximum GPU usage
+set OLLAMA_NUM_GPU=999          # Use all GPU layers
+set CUDA_VISIBLE_DEVICES=0      # Use first GPU (or 0,1 for multi-GPU)
+set OLLAMA_MAX_LOADED_MODELS=4  # Load more models with GPU memory
+set OLLAMA_KEEP_ALIVE=10m       # Keep models in VRAM longer
+```
+
+#### Recommended Configurations by GPU
+
+| GPU VRAM | Recommended Models | Max Concurrent |
+|----------|-------------------|----------------|
+| 6GB | `tinyllama:1b`, `gemma2:2b`, `llama3.2:3b` | 3 |
+| 8GB | `llama3.2:3b`, `phi3.5`, `qwen2.5:7b`, `mistral:7b` | 4 |
+| 12GB | `llama3.1:8b`, `qwen2.5:7b`, `mistral:7b`, `codellama:7b` | 4 |
+| 16GB | `llama3.1:13b`, `mixtral:8x7b-q3`, `qwen2.5:7b` | 3 |
+| 24GB | `llama3.1:70b-q2`, `mixtral:8x7b`, `llama3.1:13b` | 2-3 |
+
+### Windows-Specific Features
+
+#### 1. Process Priority Optimization
+```python
+# The system automatically sets Ollama to high priority on Windows
+python -m ensemble_llm.main --optimize-windows "Your question"
+```
+
+#### 2. GPU Memory Monitoring
+```powershell
+# Monitor GPU usage while running
+nvidia-smi -l 1
+
+# In another terminal
+python -m ensemble_llm.main -i --speed turbo
+```
+
+#### 3. Windows Task Scheduler (Auto-warmup)
+Create a scheduled task to warmup models on system start:
+```powershell
+# Create warmup script: warmup.bat
+@echo off
+cd C:\path\to\ensemble-llm
+call venv\Scripts\activate
+python -c "from ensemble_llm.fast_mode import ModelWarmup; import asyncio; mw = ModelWarmup(); asyncio.run(mw.parallel_warmup(['llama3.2:3b', 'phi3.5:latest']))"
+```
+
+### Troubleshooting (Windows)
+
+#### Ollama not found
+```powershell
+# Add Ollama to PATH manually
+set PATH=%PATH%;%LOCALAPPDATA%\Programs\Ollama
+
+# Or reinstall Ollama and ensure "Add to PATH" is checked
+```
+
+#### GPU not detected
+```powershell
+# Check CUDA installation
+nvidia-smi
+
+# Check if Ollama detects GPU
+ollama run llama3.2:3b --verbose
+
+# Should show: "Loading model on GPU..."
+```
+
+#### Permission errors
+```powershell
+# Run PowerShell as Administrator
+# Or ensure your user has write permissions to the project directory
+```
+
+#### Memory errors with multiple models
+```powershell
+# Reduce number of concurrent models
+python -m ensemble_llm.main --models llama3.2:3b gemma2:2b --speed fast "Query"
+
+# Or use smaller quantized versions
+ollama pull llama3.2:1b  # Smaller version
+```
+
+### Windows Performance Tips
+
+1. **Use GPU-optimized models**: Models with Q4_K_M quantization work best on GPUs
+2. **Close unnecessary programs**: Free up RAM and VRAM
+3. **Use Windows GPU scheduling**: Settings → System → Display → Graphics settings → Hardware-accelerated GPU scheduling
+4. **Disable Windows Defender scanning** for the Ollama models directory (with caution)
+5. **Use NVMe SSD** for model storage if possible
+
+### Example: Maximum Performance on Windows Gaming PC
+```powershell
+# For a system with RTX 4090 (24GB VRAM), 64GB RAM
+
+# Set environment
+set OLLAMA_NUM_GPU=999
+set OLLAMA_MAX_LOADED_MODELS=6
+set CUDA_VISIBLE_DEVICES=0
+
+# Start Ollama
+scripts\start_ollama_windows.bat
+
+# Use large models
+python -m ensemble_llm.main ^
+  --models llama3.1:13b mixtral:8x7b qwen2.5:14b ^
+  --speed balanced ^
+  "Complex question requiring deep reasoning"
+```
+
 
 ## Usage
 
@@ -233,5 +438,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - [Ollama](https://ollama.ai/) for making local LLM deployment easy
 - The open-source AI community for providing amazing models
-
----
