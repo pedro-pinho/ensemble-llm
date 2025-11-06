@@ -46,6 +46,9 @@ function ensembleApp() {
                 this.$nextTick(() => {
                     this.scrollToBottom();
                 });
+
+                // Load memory stats
+                this.loadMemoryStats();
                 
                 // Focus on input field
                 document.getElementById('query-input')?.focus();
@@ -311,6 +314,19 @@ function ensembleApp() {
             },
             speedMode() {
                 this.updateSettings();
+            }
+        },
+
+        async loadMemoryStats() {
+            try {
+                const response = await fetch('/api/memory/stats');
+                if (response.ok) {
+                    const stats = await response.json();
+                    console.log('Memory stats:', stats);
+                    // Display stats in UI if desired
+                }
+            } catch (error) {
+                console.error('Failed to load memory stats:', error);
             }
         }
     };

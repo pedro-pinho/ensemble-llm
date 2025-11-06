@@ -431,7 +431,6 @@ FEATURES = {
 # Display configuration
 DISPLAY_CONFIG = {
     "max_preview_length": 200,
-    "use_emojis": True,
     "show_timestamps": True,
     "colored_output": True,
     "progress_indicators": True,

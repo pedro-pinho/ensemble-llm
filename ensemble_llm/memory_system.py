@@ -1,0 +1,715 @@
+"""Intelligent Memory System for Ensemble LLM"""
+
+import json
+import logging
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+from pathlib import Path
+import hashlib
+from dataclasses import dataclass, asdict
+from enum import Enum
+import warnings
+
+import chromadb
+from chromadb.config import Settings
+from chromadb.utils import embedding_functions
+import sqlite3
+from sentence_transformers import SentenceTransformer
+
+warnings.filterwarnings("ignore", category=UserWarning, message=".*urllib3 v2.*")
+
+logger = logging.getLogger("EnsembleLLM.Memory")
+
+
+class MemoryType(Enum):
+    """Types of memory entries"""
+
+    FACT = "fact"
+    PREFERENCE = "preference"
+    CONVERSATION = "conversation"
+    INFERENCE = "inference"
+    RELATIONSHIP = "relationship"
+
+
+@dataclass
+class MemoryEntry:
+    """A single memory entry"""
+
+    id: str
+    type: MemoryType
+    content: str
+    metadata: Dict[str, Any]
+    timestamp: datetime
+    confidence: float = 1.0
+    source: str = "user"
+
+    def to_dict(self):
+        data = asdict(self)
+        data["type"] = self.type.value
+        data["timestamp"] = self.timestamp.isoformat()
+        return data
+
+
+def sanitize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Sanitize metadata for ChromaDB storage.
+    Converts complex nested structures to JSON strings.
+    """
+    if not metadata:
+        return {}
+
+    sanitized = {}
+
+    for key, value in metadata.items():
+        if value is None or isinstance(value, (str, int, float, bool)):
+            # These types are fine
+            sanitized[key] = value
+        elif isinstance(value, dict):
+            # Serialize nested dicts as JSON strings
+            sanitized[f"{key}_json"] = json.dumps(value)
+        elif isinstance(value, list):
+            # Serialize lists as JSON strings
+            sanitized[f"{key}_json"] = json.dumps(value)
+        elif isinstance(value, datetime):
+            # Convert datetime to ISO string
+            sanitized[key] = value.isoformat()
+        else:
+            # Convert everything else to string
+            sanitized[key] = str(value)
+
+    return sanitized
+
+
+class InferenceEngine:
+    """Make intelligent inferences from facts"""
+
+    def __init__(self):
+        # Define inference rules
+        self.rules = [
+            {
+                "pattern": {"location_country": "Brazil"},
+                "inferences": [
+                    {"type": "language", "value": "Portuguese", "confidence": 0.9},
+                    {"type": "timezone", "value": "BRT/BRST", "confidence": 0.8},
+                ],
+            },
+            {
+                "pattern": {"location_city": "São Paulo"},
+                "inferences": [
+                    {"type": "location_country", "value": "Brazil", "confidence": 0.95},
+                    {"type": "location_state", "value": "SP", "confidence": 0.95},
+                ],
+            },
+            {
+                "pattern": {"location_city": "Bauru"},
+                "inferences": [
+                    {"type": "location_country", "value": "Brazil", "confidence": 0.95},
+                    {"type": "location_state", "value": "SP", "confidence": 0.95},
+                ],
+            },
+            {
+                "pattern": {"profession": "software developer"},
+                "inferences": [
+                    {"type": "skill", "value": "programming", "confidence": 0.95},
+                    {"type": "skill", "value": "problem solving", "confidence": 0.9},
+                ],
+            },
+        ]
+
+    def infer(self, facts: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate inferences from known facts"""
+
+        inferences = []
+
+        for rule in self.rules:
+            pattern_match = all(
+                facts.get(key) == value for key, value in rule["pattern"].items()
+            )
+
+            if pattern_match:
+                for inference in rule["inferences"]:
+                    if facts.get(inference["type"]) != inference["value"]:
+                        inferences.append(
+                            {
+                                "type": inference["type"],
+                                "value": inference["value"],
+                                "confidence": inference["confidence"],
+                                "source": "inference",
+                                "based_on": rule["pattern"],
+                            }
+                        )
+
+        return inferences
+
+
+class SemanticMemory:
+    """Semantic memory using ChromaDB for vector search"""
+
+    def __init__(self, memory_dir: str = "memory_store"):
+        self.memory_dir = Path(memory_dir)
+        self.memory_dir.mkdir(exist_ok=True)
+
+        # Add to .gitignore
+        gitignore_path = self.memory_dir / ".gitignore"
+        if not gitignore_path.exists():
+            gitignore_path.write_text("*\n!.gitignore\n")
+
+        # Initialize ChromaDB with persistent storage
+        self.chroma_client = chromadb.PersistentClient(
+            path=str(self.memory_dir / "chromadb"),
+            settings=Settings(anonymized_telemetry=False, allow_reset=True),
+        )
+
+        # Initialize sentence transformer for embeddings
+        self.embedding_function = (
+            embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="all-MiniLM-L6-v2"
+            )
+        )
+
+        # Create collections
+        self.facts_collection = self.chroma_client.get_or_create_collection(
+            name="facts",
+            embedding_function=self.embedding_function,
+            metadata={"description": "User facts and information"},
+        )
+
+        self.conversations_collection = self.chroma_client.get_or_create_collection(
+            name="conversations",
+            embedding_function=self.embedding_function,
+            metadata={"description": "Conversation history"},
+        )
+
+        # Initialize SQLite for structured data
+        self.db_path = self.memory_dir / "memory.db"
+        self.init_database()
+
+        # Initialize inference engine
+        self.inference_engine = InferenceEngine()
+
+        logger.info(f"Initialized semantic memory at {self.memory_dir}")
+
+    def init_database(self):
+        """Initialize SQLite database for structured data"""
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Facts table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS facts (
+                id TEXT PRIMARY KEY,
+                category TEXT,
+                key TEXT,
+                value TEXT,
+                confidence REAL,
+                source TEXT,
+                timestamp DATETIME,
+                metadata TEXT,
+                UNIQUE(category, key)
+            )
+        """
+        )
+
+        # Conversations table - CREATE THIS HERE!
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                query TEXT,
+                response TEXT,
+                metadata TEXT,
+                timestamp DATETIME
+            )
+        """
+        )
+
+        # Conversation summaries table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                id TEXT PRIMARY KEY,
+                date DATE,
+                summary TEXT,
+                key_topics TEXT,
+                timestamp DATETIME
+            )
+        """
+        )
+
+        # Memory stats table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memory_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                total_facts INTEGER,
+                total_conversations INTEGER,
+                last_updated DATETIME
+            )
+        """
+        )
+
+        conn.commit()
+        conn.close()
+
+        logger.info("Initialized database tables")
+
+    def store_fact(
+        self,
+        category: str,
+        key: str,
+        value: str,
+        confidence: float = 1.0,
+        source: str = "user",
+    ) -> str:
+        """Store a fact with automatic inference generation"""
+
+        fact_id = hashlib.md5(f"{category}:{key}".encode()).hexdigest()
+
+        # Prepare metadata for ChromaDB (must be flat)
+        chromadb_metadata = {
+            "category": category,
+            "key": key,
+            "value": value[:500] if len(value) > 500 else value,
+            "confidence": confidence,
+            "source": source,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Store in ChromaDB for semantic search
+        self.facts_collection.upsert(
+            ids=[fact_id],
+            documents=[f"{category}: {key} is {value}"],
+            metadatas=[chromadb_metadata],
+        )
+
+        # Store in SQLite for structured queries
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO facts 
+            (id, category, key, value, confidence, source, timestamp, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                fact_id,
+                category,
+                key,
+                value,
+                confidence,
+                source,
+                datetime.now(),
+                json.dumps({"original": True}),
+            ),
+        )
+
+        conn.commit()
+        conn.close()
+
+        # Generate inferences
+        self._generate_inferences({f"{category}_{key}": value})
+
+        logger.info(
+            f"Stored fact: {category}:{key} = {value[:100] if len(value) > 100 else value}"
+        )
+        return fact_id
+
+    def _generate_inferences(self, new_facts: Dict[str, str]):
+        """Generate and store inferences from new facts"""
+
+        all_facts = self.get_all_facts()
+        all_facts.update(new_facts)
+
+        inferences = self.inference_engine.infer(all_facts)
+
+        for inference in inferences:
+            self.store_fact(
+                category="inferred",
+                key=inference["type"],
+                value=inference["value"],
+                confidence=inference["confidence"],
+                source="inference",
+            )
+
+            logger.info(
+                f"Generated inference: {inference['type']} = {inference['value']}"
+            )
+
+    def store_conversation(self, query: str, response: str, metadata: Dict = None):
+        """Store a conversation exchange with sanitized metadata"""
+
+        conv_id = hashlib.md5(
+            f"{query}:{datetime.now().isoformat()}".encode()
+        ).hexdigest()
+
+        # Sanitize metadata for ChromaDB
+        safe_metadata = {
+            "query": query[:500] if len(query) > 500 else query,
+            "response": response[:500] if len(response) > 500 else response,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Add selected fields from metadata if they exist
+        if metadata:
+            if "selected_model" in metadata:
+                safe_metadata["selected_model"] = str(metadata["selected_model"])
+            if "total_ensemble_time" in metadata:
+                safe_metadata["total_time"] = float(metadata["total_ensemble_time"])
+            if "successful_models" in metadata:
+                safe_metadata["successful_models"] = int(metadata["successful_models"])
+            if "total_models" in metadata:
+                safe_metadata["total_models"] = int(metadata["total_models"])
+            if "used_web_search" in metadata:
+                safe_metadata["used_web_search"] = bool(metadata["used_web_search"])
+
+            # Store complex scores as JSON string
+            if "all_scores" in metadata:
+                safe_metadata["scores_json"] = json.dumps(metadata["all_scores"])
+
+        # Store in ChromaDB
+        self.conversations_collection.add(
+            ids=[conv_id],
+            documents=[f"User: {query}\nAssistant: {response}"],
+            metadatas=[safe_metadata],
+        )
+
+        # Store full conversation in SQLite
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO conversations (id, query, response, metadata, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        """,
+            (
+                conv_id,
+                query,
+                response,
+                json.dumps(metadata) if metadata else "{}",
+                datetime.now(),
+            ),
+        )
+
+        conn.commit()
+        conn.close()
+
+        logger.debug(f"Stored conversation: {conv_id}")
+        return conv_id
+
+    def search_facts(self, query: str, n_results: int = 5) -> List[Dict]:
+        """Search facts using semantic similarity"""
+
+        try:
+            results = self.facts_collection.query(
+                query_texts=[query], n_results=n_results
+            )
+
+            facts = []
+            if results["metadatas"] and results["metadatas"][0]:
+                for metadata, distance in zip(
+                    results["metadatas"][0], results["distances"][0]
+                ):
+                    facts.append({**metadata, "relevance": 1 - distance})
+
+            return facts
+        except Exception as e:
+            logger.error(f"Error searching facts: {e}")
+            return []
+
+    def search_conversations(self, query: str, n_results: int = 3) -> List[Dict]:
+        """Search past conversations"""
+
+        try:
+            results = self.conversations_collection.query(
+                query_texts=[query], n_results=n_results
+            )
+
+            conversations = []
+            if results["metadatas"] and results["metadatas"][0]:
+                for metadata, document in zip(
+                    results["metadatas"][0], results["documents"][0]
+                ):
+                    # Reconstruct scores if they were stored as JSON
+                    if "scores_json" in metadata:
+                        try:
+                            metadata["scores"] = json.loads(metadata["scores_json"])
+                            del metadata["scores_json"]
+                        except:
+                            pass
+
+                    conversations.append({"content": document, "metadata": metadata})
+
+            return conversations
+        except Exception as e:
+            logger.error(f"Error searching conversations: {e}")
+            return []
+
+    def get_all_facts(self) -> Dict[str, str]:
+        """Get all facts as a dictionary"""
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT category, key, value FROM facts WHERE confidence > 0.5")
+        rows = cursor.fetchall()
+
+        facts = {}
+        for category, key, value in rows:
+            facts[f"{category}_{key}"] = value
+
+        conn.close()
+        return facts
+
+    def get_user_context(self, query: str) -> str:
+        """Get relevant user context for a query"""
+
+        context_parts = []
+
+        # Search relevant facts
+        relevant_facts = self.search_facts(query, n_results=5)
+
+        if relevant_facts:
+            fact_strs = []
+            for fact in relevant_facts:
+                if fact.get("relevance", 0) > 0.5:
+                    fact_strs.append(
+                        f"- {fact.get('key', 'fact')}: {fact.get('value', 'unknown')}"
+                    )
+
+            if fact_strs:
+                context_parts.append("Known facts about user:\n" + "\n".join(fact_strs))
+
+        # Search relevant past conversations
+        past_convs = self.search_conversations(query, n_results=2)
+
+        if past_convs:
+            context_parts.append("\nRelevant past conversations:")
+            for conv in past_convs:
+                timestamp = conv["metadata"].get("timestamp", "")
+                if timestamp:
+                    try:
+                        timestamp_dt = datetime.fromisoformat(timestamp)
+                        if (datetime.now() - timestamp_dt).days < 7:
+                            query_preview = conv["metadata"].get("query", "")[:100]
+                            if query_preview:
+                                context_parts.append(f"- {query_preview}...")
+                    except:
+                        pass
+
+        return "\n".join(context_parts) if context_parts else ""
+
+    def forget(self, category: str = None, key: str = None):
+        """Forget specific facts"""
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        if category and key:
+            # Find the fact ID to remove from ChromaDB
+            cursor.execute(
+                "SELECT id FROM facts WHERE category = ? AND key = ?", (category, key)
+            )
+            result = cursor.fetchone()
+            if result:
+                fact_id = result[0]
+                try:
+                    self.facts_collection.delete(ids=[fact_id])
+                except:
+                    pass
+
+            cursor.execute(
+                "DELETE FROM facts WHERE category = ? AND key = ?", (category, key)
+            )
+            logger.info(f"Forgot {category}:{key}")
+        elif category:
+            # Find all fact IDs in category
+            cursor.execute("SELECT id FROM facts WHERE category = ?", (category,))
+            fact_ids = [row[0] for row in cursor.fetchall()]
+            if fact_ids:
+                try:
+                    self.facts_collection.delete(ids=fact_ids)
+                except:
+                    pass
+
+            cursor.execute("DELETE FROM facts WHERE category = ?", (category,))
+            logger.info(f"Forgot all facts in category: {category}")
+        else:
+            # Clear everything
+            try:
+                # Get all IDs and delete from ChromaDB
+                all_facts = self.facts_collection.get()
+                if all_facts["ids"]:
+                    self.facts_collection.delete(ids=all_facts["ids"])
+
+                all_convs = self.conversations_collection.get()
+                if all_convs["ids"]:
+                    self.conversations_collection.delete(ids=all_convs["ids"])
+            except:
+                pass
+
+            cursor.execute("DELETE FROM facts")
+            cursor.execute("DELETE FROM conversations")
+            logger.info("Forgot all facts and conversations")
+
+        conn.commit()
+        conn.close()
+
+
+class MemoryManager:
+    """Main memory management interface"""
+
+    def __init__(self, memory_dir: str = "memory_store"):
+        self.semantic_memory = SemanticMemory(memory_dir)
+        self.logger = logger
+
+        # Patterns for extracting facts from natural language
+        self.fact_patterns = [
+            # Identity
+            (r"my name is (\w+)", "identity", "name"),
+            (r"i am (\w+)", "identity", "name"),
+            (r"call me (\w+)", "identity", "name"),
+            # Location
+            (r"i live in ([\w\s]+)", "location", "city"),
+            (r"i'm from ([\w\s]+)", "location", "origin"),
+            (r"i work at ([\w\s]+)", "work", "company"),
+            # Preferences
+            (r"i (like|love|enjoy) ([\w\s]+)", "preference", "likes"),
+            (r"i (hate|dislike) ([\w\s]+)", "preference", "dislikes"),
+        ]
+
+    def process_input(self, text: str) -> List[MemoryEntry]:
+        """Extract and store facts from user input"""
+
+        import re
+
+        extracted_memories = []
+
+        text_lower = text.lower()
+
+        # Check for explicit memory commands
+        if "remember that" in text_lower or "remember:" in text_lower:
+            fact_text = text.split("remember that")[-1].split("remember:")[-1].strip()
+
+            fact_id = self.semantic_memory.store_fact(
+                category="explicit",
+                key="statement",
+                value=fact_text,
+                source="user_explicit",
+            )
+
+            extracted_memories.append(
+                MemoryEntry(
+                    id=fact_id,
+                    type=MemoryType.FACT,
+                    content=fact_text,
+                    metadata={"explicit": True},
+                    timestamp=datetime.now(),
+                )
+            )
+
+        # Extract facts using patterns
+        for pattern, category, key in self.fact_patterns:
+            matches = re.findall(pattern, text_lower)
+            for match in matches:
+                value = match[1] if isinstance(match, tuple) else match
+
+                fact_id = self.semantic_memory.store_fact(
+                    category=category, key=key, value=value
+                )
+
+                extracted_memories.append(
+                    MemoryEntry(
+                        id=fact_id,
+                        type=MemoryType.FACT,
+                        content=f"{key}: {value}",
+                        metadata={"category": category},
+                        timestamp=datetime.now(),
+                    )
+                )
+
+        # Check for forget commands
+        if "forget" in text_lower:
+            if "forget everything" in text_lower:
+                self.semantic_memory.forget()
+                self.logger.info("Forgot all memories")
+            elif "forget my name" in text_lower:
+                self.semantic_memory.forget("identity", "name")
+
+        return extracted_memories
+
+    def enhance_prompt(self, prompt: str) -> str:
+        """Enhance a prompt with relevant memory context"""
+
+        context = self.semantic_memory.get_user_context(prompt)
+
+        if context:
+            enhanced_prompt = f"""User Context:
+{context}
+
+Current Query: {prompt}
+
+Please consider the user context when responding. Use any relevant information to personalize your response."""
+            return enhanced_prompt
+
+        return prompt
+
+    def save_conversation(self, query: str, response: str, metadata: Dict = None):
+        """Save a conversation to memory"""
+
+        # Extract any facts from the query
+        self.process_input(query)
+
+        # Store the conversation with sanitized metadata
+        self.semantic_memory.store_conversation(query, response, metadata)
+
+    def get_memory_stats(self) -> Dict:
+        """Get statistics about stored memories"""
+
+        try:
+            conn = sqlite3.connect(self.semantic_memory.db_path)
+            cursor = conn.cursor()
+
+            # Count facts
+            cursor.execute("SELECT COUNT(*) FROM facts")
+            fact_count = cursor.fetchone()[0]
+
+            # Count inferred facts
+            cursor.execute('SELECT COUNT(*) FROM facts WHERE source = "inference"')
+            inference_count = cursor.fetchone()[0]
+
+            # Count conversations
+            cursor.execute("SELECT COUNT(*) FROM conversations")
+            conv_count = cursor.fetchone()[0]
+
+            conn.close()
+
+            return {
+                "total_facts": fact_count,
+                "inferred_facts": inference_count,
+                "total_conversations": conv_count,
+                "memory_location": str(self.semantic_memory.memory_dir),
+            }
+        except Exception as e:
+            logger.error(f"Error getting memory stats: {e}")
+            return {
+                "total_facts": 0,
+                "inferred_facts": 0,
+                "total_conversations": 0,
+                "memory_location": str(self.semantic_memory.memory_dir),
+                "error": str(e),
+            }
+
+    def export_memories(self) -> Dict:
+        """Export all memories as JSON (for backup)"""
+
+        facts = self.semantic_memory.get_all_facts()
+
+        return {
+            "facts": facts,
+            "exported_at": datetime.now().isoformat(),
+            "stats": self.get_memory_stats(),
+        }

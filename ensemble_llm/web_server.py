@@ -424,3 +424,29 @@ async def process_query(
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "sessions": len(sessions)}
+
+
+@app.get("/api/memory/stats")
+async def get_memory_stats(request: Request):
+    """Get memory statistics"""
+    session_id = request.cookies.get("session_id")
+    session = get_or_create_session(session_id)
+
+    if session.ensemble and session.ensemble.memory_manager:
+        stats = session.ensemble.memory_manager.get_memory_stats()
+        return JSONResponse(stats)
+
+    return JSONResponse({"error": "Memory not initialized"})
+
+
+@app.post("/api/memory/forget")
+async def forget_memory(request: Request, category: str = None, key: str = None):
+    """Forget specific memories"""
+    session_id = request.cookies.get("session_id")
+    session = get_or_create_session(session_id)
+
+    if session.ensemble and session.ensemble.memory_manager:
+        session.ensemble.memory_manager.semantic_memory.forget(category, key)
+        return JSONResponse({"status": "success"})
+
+    return JSONResponse({"error": "Memory not initialized"})

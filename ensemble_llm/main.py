@@ -43,6 +43,7 @@ from .learning_system import (
 from .fast_mode import FastModeOrchestrator, TurboMode, ModelWarmup
 from .verbose_logger import VerboseFileLogger, ModelPerformanceLogger, LiveTailLogger
 from .platform_utils import PlatformUtils, WindowsOptimizer
+from .memory_system import MemoryManager
 
 
 class EnsembleLLM:
@@ -55,6 +56,7 @@ class EnsembleLLM:
         smart_learning: bool = True,
         speed_mode: str = "balanced",
         verbose_logging: bool = True,
+        enable_memory: bool = True,
     ):
 
         # Use config values with overrides
@@ -177,6 +179,22 @@ class EnsembleLLM:
             self.logger.info(
                 f"Speed mode '{speed_mode}' active: Using {len(self.models)} models"
             )
+
+        self.enable_memory = enable_memory
+        if enable_memory:
+            self.memory_manager = MemoryManager(
+                memory_dir=TRACKING_CONFIG.get("memory_dir", "memory_store")
+            )
+            self.logger.info("Memory system enabled")
+
+            # Log memory stats
+            stats = self.memory_manager.get_memory_stats()
+            self.logger.info(
+                f"Loaded {stats['total_facts']} facts, "
+                f"{stats['total_conversations']} conversations"
+            )
+        else:
+            self.memory_manager = None
 
     async def initialize(self):
         """Async initialization - preload models and resolve names"""
@@ -1020,10 +1038,17 @@ class EnsembleLLM:
 
         start_time = datetime.now()
 
+        enhanced_prompt = prompt
+        if self.enable_memory and self.memory_manager:
+            enhanced_prompt = self.memory_manager.enhance_prompt(prompt)
+
+            if enhanced_prompt != prompt:
+                self.logger.info("Enhanced prompt with memory context")
+
         if self.verbose_logging and hasattr(self, "verbose_logger"):
             self.verbose_logger.log_query_start(
                 query_id=self.query_count + 1,
-                prompt=prompt,
+                prompt=enhanced_prompt,
                 models=self.models,
                 speed_mode=self.speed_mode,
                 web_search=self.enable_web_search,
@@ -1031,7 +1056,7 @@ class EnsembleLLM:
 
         # Check cache first if smart learning is enabled
         if self.smart_learning and self.orchestrator:
-            cached_result = await self.orchestrator.check_cache(prompt)
+            cached_result = await self.orchestrator.check_cache(enhanced_prompt)
 
             if cached_result:
                 response, metadata = cached_result
@@ -1044,7 +1069,6 @@ class EnsembleLLM:
                     if verbose:
                         cache_similarity = metadata.get("cache_similarity", 1.0)
                         print(
-                            f"\n{'🎯' if DISPLAY_CONFIG['use_emojis'] else ''} "
                             f"Using cached result (similarity: {cache_similarity:.2f})"
                         )
 
@@ -1058,7 +1082,7 @@ class EnsembleLLM:
         # Detect query type if specialized selection is enabled
         query_type = None
         if FEATURES["specialized_selection"]:
-            query_type = await self.detect_query_type(prompt)
+            query_type = await self.detect_query_type(enhanced_prompt)
             if query_type:
                 self.logger.info(f"Detected query type: {query_type}")
 
@@ -1081,9 +1105,9 @@ class EnsembleLLM:
         )
 
         if self.speed_mode in ["turbo", "fast"]:
-            responses = await self.query_all_models_fast(prompt)
+            responses = await self.query_all_models_fast(enhanced_prompt)
         else:
-            responses = await self.query_all_models_optimized(prompt)
+            responses = await self.query_all_models_optimized(enhanced_prompt)
 
         # For turbo mode, skip complex voting if we only have 1-2 responses
         if self.speed_mode == "turbo" and len(responses) <= 2:
@@ -1186,7 +1210,7 @@ class EnsembleLLM:
 
             # Update all learning components
             self.orchestrator.update_learning(
-                query=prompt,
+                query=enhanced_prompt,
                 response=best_response,
                 metadata=metadata,
                 model_performances=model_performances,
@@ -1224,6 +1248,11 @@ class EnsembleLLM:
                 "SUCCESS",
             )
 
+        if self.enable_memory and self.memory_manager:
+            self.memory_manager.save_conversation(
+                query=prompt, response=best_response, metadata=metadata
+            )
+
         return best_response, metadata
 
     async def show_smart_insights(self):
@@ -1235,16 +1264,14 @@ class EnsembleLLM:
 
         insights = self.orchestrator.get_performance_insights()
 
-        use_emojis = DISPLAY_CONFIG["use_emojis"]
-
         print(f"\n{'='*60}")
-        print(f"{'🧠' if use_emojis else ''} Smart Learning Insights")
+        print(f"Smart Learning Insights")
         print(f"{'='*60}")
         print(f"Total Queries Processed: {insights['total_queries']}")
         print(f"Cache Hit Rate: {insights['cache_hit_rate']:.1f}%")
         print(f"Average Response Time: {insights['avg_response_time']:.2f}s")
 
-        print(f"\n{'📊' if use_emojis else ''} Model Confidence Scores:")
+        print(f"\nModel Confidence Scores:")
         sorted_confidences = sorted(
             insights["model_confidences"].items(), key=lambda x: x[1], reverse=True
         )
@@ -1253,7 +1280,7 @@ class EnsembleLLM:
             print(f"  {model:30} {bar} {confidence:.2f}")
 
         if insights["top_models_by_type"]:
-            print(f"\n{'🎯' if use_emojis else ''} Best Models by Query Type:")
+            print(f"\nBest Models by Query Type:")
             for query_type, models in insights["top_models_by_type"].items():
                 print(f"  {query_type:15} -> {', '.join(models[:3])}")
 
@@ -1262,7 +1289,7 @@ class EnsembleLLM:
         if cache_dir.exists():
             cache_size = sum(f.stat().st_size for f in cache_dir.glob("*.pkl"))
             cache_count = len(list(cache_dir.glob("*.pkl")))
-            print(f"\n{'💾' if use_emojis else ''} Cache Statistics:")
+            print(f"\nCache Statistics:")
             print(f"  Cached Queries: {cache_count}")
             print(f"  Cache Size: {cache_size / (1024*1024):.2f} MB")
 
@@ -1271,33 +1298,17 @@ class EnsembleLLM:
     ):
         """Display detailed output in verbose mode using config settings"""
 
-        use_emojis = DISPLAY_CONFIG["use_emojis"]
         max_preview = DISPLAY_CONFIG["max_preview_length"]
         show_timestamps = DISPLAY_CONFIG["show_timestamps"]
 
         print("\n" + "=" * 60)
-        print(f"{'📊 ' if use_emojis else ''}Individual Model Responses:")
+        print(f"Individual Model Responses:")
         print("=" * 60)
 
         for r in responses:
-            # Status indicators
-            if use_emojis:
-                status = "✅" if r["success"] else "❌"
-                web = "🌐" if r.get("used_web_search", False) else ""
-
-                rt = r.get("response_time", 0)
-                if rt == 0:
-                    time_indicator = "⏸️"
-                elif rt < 5:
-                    time_indicator = "🚀"
-                elif rt < 15:
-                    time_indicator = "⏱️"
-                else:
-                    time_indicator = "🐢"
-            else:
-                status = "[OK]" if r["success"] else "[FAIL]"
-                web = "[WEB]" if r.get("used_web_search", False) else ""
-                time_indicator = ""
+            status = "[OK]" if r["success"] else "[FAIL]"
+            web = "[WEB]" if r.get("used_web_search", False) else ""
+            time_indicator = ""
 
             rt_str = f"({r.get('response_time', 0):.1f}s)" if show_timestamps else ""
 
@@ -1319,7 +1330,7 @@ class EnsembleLLM:
                 print(f"   Error: {r['response']}")
 
         print("\n" + "=" * 60)
-        print(f"{'🏆 ' if use_emojis else ''}Voting Results:")
+        print(f"Voting Results:")
         print("=" * 60)
         print(f"Selected Model: {metadata.get('selected_model', 'N/A')}")
         print(f"Consensus Score: {metadata.get('consensus_score', 0):.3f}")
@@ -1327,7 +1338,7 @@ class EnsembleLLM:
         print(f"Final Score: {metadata.get('final_score', 0):.3f}")
 
         if metadata.get("used_web_search"):
-            print(f"Web Search: Yes {'🌐' if use_emojis else ''}")
+            print(f"Web Search: Yes ")
 
         if metadata.get("query_type"):
             print(f"Query Type: {metadata['query_type']}")
@@ -1340,7 +1351,7 @@ class EnsembleLLM:
         )
 
         if "all_scores" in metadata and len(metadata["all_scores"]) > 1:
-            print(f"\n{'📈 ' if use_emojis else ''}All Model Scores:")
+            print(f"\nAll Model Scores:")
             sorted_models = sorted(
                 metadata["all_scores"].items(),
                 key=lambda x: x[1]["final"],
@@ -1348,10 +1359,7 @@ class EnsembleLLM:
             )
 
             for model, scores in sorted_models:
-                if use_emojis:
-                    web_indicator = "🌐" if scores.get("used_web", False) else "  "
-                else:
-                    web_indicator = "[W]" if scores.get("used_web", False) else "   "
+                web_indicator = "[W]" if scores.get("used_web", False) else "   "
 
                 time_str = (
                     f"{scores.get('response_time', 0):.1f}s" if show_timestamps else ""
@@ -1365,25 +1373,11 @@ class EnsembleLLM:
                 )
 
         if self.performance_tracker and FEATURES["performance_tracking"]:
-            print(f"\n{'📊 ' if use_emojis else ''}Model Health Status:")
+            print(f"\nModel Health Status:")
             for model in self.models[:5]:  # Show top 5 models
                 eval_result = self.performance_tracker.evaluate_model_performance(model)
-
-                if use_emojis:
-                    status_emoji = {
-                        "healthy": "✅",
-                        "unhealthy": "⚠️",
-                        "underutilized": "📉",
-                        "slow": "🐢",
-                        "failing": "❌",
-                        "new": "🆕",
-                        "insufficient_data": "📊",
-                    }.get(eval_result["status"], "❓")
-                else:
-                    status_emoji = f"[{eval_result['status'][:4].upper()}]"
-
                 print(
-                    f"   {status_emoji} {model:30} | Status: {eval_result['status']:15} | "
+                    f"   {model:30} | Status: {eval_result['status']:15} | "
                     f"Score: {eval_result.get('score', 0):.2f}"
                 )
 
@@ -1472,7 +1466,6 @@ async def main():
         default=LOGGING_CONFIG["default_level"],
         help="Set logging level",
     )
-    parser.add_argument("--no-emojis", action="store_true", help="Disable emoji output")
     parser.add_argument(
         "--host",
         default=None,
@@ -1518,10 +1511,6 @@ async def main():
     )
 
     args = parser.parse_args()
-
-    # Override display config if requested
-    if args.no_emojis:
-        DISPLAY_CONFIG["use_emojis"] = False
 
     # Setup logging
     logger = setup_logger("EnsembleLLM", args.log_level)
@@ -1581,24 +1570,21 @@ async def main():
         print(f"✅ Set GPU environment variables and process priority")
 
     # Display startup banner
-    use_emojis = DISPLAY_CONFIG["use_emojis"]
     print(f"\n{'='*60}")
-    print(f"{'🚀 ' if use_emojis else ''}Optimized Ensemble LLM System v2.1")
+    print(f"Optimized Ensemble LLM System v2.1")
     print(f"{'='*60}")
     print(
-        f"{'📦 ' if use_emojis else ''}Models: {', '.join(args.models[:3])}{'...' if len(args.models) > 3 else ''}"
+        f"Models: {', '.join(args.models[:3])}{'...' if len(args.models) > 3 else ''}"
     )
     print(
-        f"{'🌐 ' if use_emojis else ''}Web Search: {'Enabled' if args.web_search or FEATURES['web_search'] else 'Disabled'}"
+        f"Web Search: {'Enabled' if args.web_search or FEATURES['web_search'] else 'Disabled'}"
     )
     print(
-        f"{'🧠 ' if use_emojis else ''}Adaptive Mode: {'Enabled' if not args.no_adaptive and FEATURES['adaptive_models'] else 'Disabled'}"
+        f"Adaptive Mode: {'Enabled' if not args.no_adaptive and FEATURES['adaptive_models'] else 'Disabled'}"
     )
-    print(f"{'📝 ' if use_emojis else ''}Log Level: {args.log_level}")
-    print(
-        f"{'📄 ' if use_emojis else ''}Log File: {LOGGING_CONFIG['log_dir']}/{LOGGING_CONFIG['log_file']}"
-    )
-    print(f"{'⚡ ' if use_emojis else ''}Speed Mode: {args.speed}")
+    print(f"Log Level: {args.log_level}")
+    print(f"Log File: {LOGGING_CONFIG['log_dir']}/{LOGGING_CONFIG['log_file']}")
+    print(f"Speed Mode: {args.speed}")
     if args.speed == "turbo":
         print("   Ultra-fast mode: 2 models, 10s timeout, race strategy")
     elif args.speed == "fast":
@@ -1621,32 +1607,32 @@ async def main():
         await ensemble.model_warmup.parallel_warmup(ensemble.models)
 
     # Initialize (preload models)
-    print(f"{'🔄 ' if use_emojis else ''}Initializing models...")
+    print(f"Initializing models...")
     await ensemble.initialize()
-    print(f"{'✅ ' if use_emojis else ''}Ready!\n")
+    print(f"Ready!\n")
 
     try:
         if args.interactive or not args.prompt:
-            print(f"{'💡 ' if use_emojis else ''}Commands:")
+            print(f"Commands:")
             print("   'exit' or 'quit' - Exit the program")
             print("   'status' - Show model performance statistics")
             print("   'models' - List current active models")
             print("   'help' - Show this help message")
-            print(f"\n{'💡 ' if use_emojis else ''}Enter your questions below:\n")
+            print(f"\nEnter your questions below:\n")
 
             while True:
                 try:
-                    prompt = input(f"\n{'💭 ' if use_emojis else ''}Q: ").strip()
+                    prompt = input(f"\nQ: ").strip()
 
                     if not prompt:
                         continue
 
                     if prompt.lower() in ["exit", "quit", "q"]:
-                        print(f"\n{'👋 ' if use_emojis else ''}Goodbye!")
+                        print(f"\nGoodbye!")
                         break
 
                     if prompt.lower() == "help":
-                        print(f"\n{'💡 ' if use_emojis else ''}Available commands:")
+                        print(f"\nAvailable commands:")
                         print("   'status' - Show model performance")
                         print("   'models' - List active models")
                         print("   'exit' - Quit the program")
@@ -1659,15 +1645,11 @@ async def main():
                                 + ensemble.performance_tracker.get_performance_summary()
                             )
                         else:
-                            print(
-                                f"\n{'⚠️ ' if use_emojis else ''}Performance tracking is disabled"
-                            )
+                            print(f"\nPerformance tracking is disabled")
                         continue
 
                     if prompt.lower() == "models":
-                        print(
-                            f"\n{'📦 ' if use_emojis else ''}Active models ({len(ensemble.models)}):"
-                        )
+                        print(f"\nActive models ({len(ensemble.models)}):")
                         for i, model in enumerate(ensemble.models, 1):
                             model_config = MODEL_CONFIGS.get(model, {})
                             desc = model_config.get("description", "")
@@ -1683,37 +1665,33 @@ async def main():
                     # Display response
                     selected = metadata.get("selected_model", "ensemble")
                     web_indicator = (
-                        f"{'🌐 ' if use_emojis else '[WEB] '}"
-                        if metadata.get("used_web_search", False)
-                        else ""
+                        f"[WEB]" if metadata.get("used_web_search", False) else ""
                     )
 
-                    print(
-                        f"\n{web_indicator}{'💡 ' if use_emojis else ''}Answer (via {selected}):"
-                    )
+                    print(f"\n{web_indicator}Answer (via {selected}):")
                     print("-" * 40)
                     print(response)
                     print("-" * 40)
 
                     if DISPLAY_CONFIG["show_timestamps"]:
                         print(
-                            f"{'⏱️ ' if use_emojis else ''}Response time: {metadata.get('total_ensemble_time', 0):.1f}s"
+                            f"'Response time: {metadata.get('total_ensemble_time', 0):.1f}s"
                         )
 
                 except KeyboardInterrupt:
                     print(
-                        f"\n\n{'⚠️ ' if use_emojis else ''}Interrupted! Press Ctrl+C again to exit or Enter to continue..."
+                        f"\n\nInterrupted! Press Ctrl+C again to exit or Enter to continue..."
                     )
                     try:
                         input()
                     except KeyboardInterrupt:
-                        print(f"\n{'👋 ' if use_emojis else ''}Goodbye!")
+                        print(f"\nGoodbye!")
                         break
                 except Exception as e:
                     if FEATURES["verbose_errors"]:
                         logger.error(f"Error in interactive mode: {str(e)}")
                         logger.debug(traceback.format_exc())
-                    print(f"\n{'❌ ' if use_emojis else ''}Error: {str(e)}")
+                    print(f"\nError: {str(e)}")
                     print("Please try again or type 'exit' to quit.")
 
         else:
@@ -1724,51 +1702,41 @@ async def main():
 
             # Display response
             selected = metadata.get("selected_model", "ensemble")
-            web_indicator = (
-                f"{'🌐 ' if use_emojis else '[WEB] '}"
-                if metadata.get("used_web_search", False)
-                else ""
-            )
+            web_indicator = "[WEB]" if metadata.get("used_web_search", False) else ""
 
-            print(
-                f"\n{web_indicator}{'💡 ' if use_emojis else ''}Answer (via {selected}):"
-            )
+            print(f"\n{web_indicator}Answer (via {selected}):")
             print("=" * 60)
             print(response)
             print("=" * 60)
 
             if DISPLAY_CONFIG["show_timestamps"]:
-                print(
-                    f"\n{'⏱️ ' if use_emojis else ''}Total time: {metadata.get('total_ensemble_time', 0):.1f}s"
-                )
+                print(f"\n'Total time: {metadata.get('total_ensemble_time', 0):.1f}s")
 
             if not args.verbose and DISPLAY_CONFIG["progress_indicators"]:
+                print(f"Score: {metadata.get('final_score', 0):.3f}")
                 print(
-                    f"{'📊 ' if use_emojis else ''}Score: {metadata.get('final_score', 0):.3f}"
-                )
-                print(
-                    f"{'✅ ' if use_emojis else ''}Successful models: {metadata.get('successful_models', 0)}/{metadata.get('total_models', 0)}"
+                    f"Successful models: {metadata.get('successful_models', 0)}/{metadata.get('total_models', 0)}"
                 )
 
     except Exception as e:
         if FEATURES["verbose_errors"]:
             logger.error(f"Fatal error: {str(e)}")
             logger.debug(traceback.format_exc())
-        print(f"\n{'❌ ' if use_emojis else ''}Fatal error: {str(e)}")
+        print(f"\nFatal error: {str(e)}")
         print(
             f"Check {LOGGING_CONFIG['log_dir']}/{LOGGING_CONFIG['log_file']} for details"
         )
 
     finally:
-        print(f"\n{'🔄 ' if use_emojis else ''}Shutting down...")
+        print(f"\nShutting down...")
         await ensemble.cleanup()
 
         if ensemble.performance_tracker and FEATURES["performance_tracking"]:
             print(
-                f"{'💾 ' if use_emojis else ''}Performance data saved to {TRACKING_CONFIG['data_dir']}/{TRACKING_CONFIG['performance_file']}"
+                f"Performance data saved to {TRACKING_CONFIG['data_dir']}/{TRACKING_CONFIG['performance_file']}"
             )
 
-        print(f"{'✅ ' if use_emojis else ''}Shutdown complete")
+        print(f"Shutdown complete")
 
 
 if __name__ == "__main__":
