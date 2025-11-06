@@ -28,11 +28,14 @@ from .learning_system import (
     QueryPatternLearner, PrecomputeManager
 )
 from .fast_mode import FastModeOrchestrator, TurboMode, ModelWarmup
+from .verbose_logger import VerboseFileLogger, ModelPerformanceLogger, LiveTailLogger
+
 
 class EnsembleLLM:
     def __init__(self, models: List[str] = None, ollama_host: str = None, 
                  enable_web_search: bool = None, adaptive_mode: bool = None,
-                 smart_learning: bool = True, speed_mode: str = 'balanced'):
+                 smart_learning: bool = True, speed_mode: str = 'balanced',
+                 verbose_logging: bool = True):
         
         # Use config values with overrides
         self.host = ollama_host or OLLAMA_ENDPOINTS['default_host']
@@ -101,6 +104,21 @@ class EnsembleLLM:
         self.fast_orchestrator = FastModeOrchestrator()
         self.turbo_mode = TurboMode(self.host)
         self.model_warmup = ModelWarmup(self.host)
+
+        self.verbose_logging = verbose_logging
+        if verbose_logging:
+            self.verbose_logger = VerboseFileLogger()
+            self.performance_logger = ModelPerformanceLogger()
+            self.live_logger = LiveTailLogger()
+            
+            # Log initialization
+            self.verbose_logger.log_query_start(
+                query_id=0,
+                prompt="SYSTEM INITIALIZATION",
+                models=self.models,
+                speed_mode=speed_mode,
+                web_search=self.enable_web_search
+            )
 
         # Optimize model selection based on speed mode
         if speed_mode in SPEED_OPTIMIZED_MODELS:
@@ -457,6 +475,12 @@ class EnsembleLLM:
                                    stagger_delay: float = 0) -> Dict:
         """Query a model with optimizations using config settings"""
 
+        start_time = datetime.now()
+        
+        if self.verbose_logging and hasattr(self, 'live_logger'):
+            self.live_logger.log_live(f"Querying {model}...", "START")
+        
+
         # Get optimal parameters from learning system
         if self.smart_learning and self.orchestrator:
             optimal_params = self.orchestrator.get_optimal_params_for_model(model)
@@ -479,8 +503,6 @@ class EnsembleLLM:
         # Add stagger delay to prevent resource competition
         if FEATURES['staggered_starts'] and stagger_delay > 0:
             await asyncio.sleep(stagger_delay)
-        
-        start_time = datetime.now()
         
         # Get optimized timeout for this model
         if self.model_manager:
@@ -541,7 +563,7 @@ class EnsembleLLM:
                                 payload["prompt"] = enhanced_prompt
                                 continue
                         
-                        return {
+                        response_dict = {
                             "model": model,
                             "response": response_text,
                             "success": True,
@@ -553,6 +575,27 @@ class EnsembleLLM:
                             }
                         }
                         
+                        if self.verbose_logging and hasattr(self, 'verbose_logger'):
+                            self.verbose_logger.log_model_response(
+                                model=model,
+                                response=response_dict,
+                                query_time=(datetime.now() - start_time).total_seconds()
+                            )
+                            
+                            # Log to performance logger
+                            if hasattr(self, 'performance_logger'):
+                                self.performance_logger.log_model_query(
+                                    model=model,
+                                    success=response_dict.get('success', False),
+                                    response_time=response_dict.get('response_time', 0),
+                                    query_type=None,  # Will be set later
+                                    was_selected=False,  # Will be updated after voting
+                                    quality_score=0,  # Will be updated after voting
+                                    consensus_score=0  # Will be updated after voting
+                                )
+                        
+                        return response_dict
+
                     else:
                         error_text = await response.text()
                         response_time = (datetime.now() - start_time).total_seconds()
@@ -855,6 +898,15 @@ class EnsembleLLM:
         """Main ensemble query method with optimization"""
         
         start_time = datetime.now()
+
+        if self.verbose_logging and hasattr(self, 'verbose_logger'):
+            self.verbose_logger.log_query_start(
+                query_id=self.query_count + 1,
+                prompt=prompt,
+                models=self.models,
+                speed_mode=self.speed_mode,
+                web_search=self.enable_web_search
+            )
         
         # Check cache first if smart learning is enabled
         if self.smart_learning and self.orchestrator:
@@ -988,6 +1040,34 @@ class EnsembleLLM:
                 model_performances=model_performances
             )
         
+        # After voting, log voting details
+        if self.verbose_logging and hasattr(self, 'verbose_logger'):
+            self.verbose_logger.log_voting_details(metadata)
+            
+            # Update performance logger with final selection
+            if hasattr(self, 'performance_logger'):
+                for response in responses:
+                    if response['success']:
+                        model_scores = metadata.get('all_scores', {}).get(response['model'], {})
+                        
+                        self.performance_logger.log_model_query(
+                            model=response['model'],
+                            success=response['success'],
+                            response_time=response.get('response_time', 0),
+                            query_type=metadata.get('query_type'),
+                            was_selected=(response['model'] == metadata.get('selected_model')),
+                            quality_score=model_scores.get('quality', 0),
+                            consensus_score=model_scores.get('consensus', 0)
+                        )
+        
+        # Log to live logger
+        if self.verbose_logging and hasattr(self, 'live_logger'):
+            self.live_logger.log_live(
+                f"Query #{self.query_count} completed in {metadata.get('total_ensemble_time', 0):.2f}s - "
+                f"Selected: {metadata.get('selected_model', 'N/A')}",
+                "SUCCESS"
+            )
+
         return best_response, metadata
     
     async def show_smart_insights(self):
@@ -1139,6 +1219,22 @@ class EnsembleLLM:
     
     async def cleanup(self):
         """Cleanup resources"""
+
+        # Generate daily summary if verbose logging
+        if self.verbose_logging and hasattr(self, 'performance_logger'):
+            summary = self.performance_logger.generate_daily_summary()
+            
+            # Log session end
+            if hasattr(self, 'verbose_logger'):
+                stats = {
+                    'total_queries': self.query_count,
+                    'cache_hits': self.orchestrator.session_data['cache_hits'] if self.orchestrator else 0,
+                    'avg_response_time': self.orchestrator.session_data['avg_response_time'] if self.orchestrator else 0,
+                    'rotations': 0  # You can track this separately
+                }
+                
+                self.verbose_logger.log_session_end(stats)
+
         if self.web_searcher:
             await self.web_searcher.close()
         
@@ -1198,6 +1294,12 @@ async def main():
                     help='Clear only failed cached responses')
     parser.add_argument('--cache-stats', action='store_true',
                     help='Show cache statistics')
+    parser.add_argument('--tail-log', action='store_true',
+                   help='Tail the live log file')
+    parser.add_argument('--view-log', action='store_true',
+                    help='View today\'s verbose log')
+    parser.add_argument('--log-stats', action='store_true',
+                    help='Show log statistics')
     
     args = parser.parse_args()
     
@@ -1225,7 +1327,14 @@ async def main():
         if smart_dir.exists():
             shutil.rmtree(smart_dir)
             print("✅ Smart cache cleared")
-        return
+
+    if args.clear_failed_cache:
+        from .learning_system import CacheManager
+        CacheManager.clear_failed_cache()
+
+    if args.cache_stats:
+        from .learning_system import CacheManager
+        CacheManager.show_cache_stats()
 
     if args.insights:
         ensemble = EnsembleLLM(
@@ -1235,14 +1344,16 @@ async def main():
         await ensemble.show_smart_insights()
         return
 
-    if args.clear_failed_cache:
-        from .learning_system import CacheManager
-        CacheManager.clear_failed_cache()
+    if args.tail_log:
+        subprocess.run(['python', 'scripts/view_logs.py', 'tail'])
         return
 
-    if args.cache_stats:
-        from .learning_system import CacheManager
-        CacheManager.show_cache_stats()
+    if args.view_log:
+        subprocess.run(['python', 'scripts/view_logs.py', 'verbose'])
+        return
+
+    if args.log_stats:
+        subprocess.run(['python', 'scripts/view_logs.py', 'performance'])
         return
     
     # Display startup banner

@@ -11,10 +11,12 @@ import asyncio
 import aiohttp
 import logging
 
+from .verbose_logger import VerboseFileLogger, ModelPerformanceLogger
+
 class ModelPerformanceTracker:
     """Track model performance and manage model rotation"""
     
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "data", verbose_logging: bool = True):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
         self.performance_file = self.data_dir / "model_performance.json"
@@ -55,6 +57,11 @@ class ModelPerformanceTracker:
             'evaluation_window': 50,      # Last 50 queries
             'retirement_threshold': 10    # Retire after 10 consecutive failures
         }
+
+        self.verbose_logging = verbose_logging
+        if verbose_logging:
+            self.verbose_logger = VerboseFileLogger()
+            self.performance_logger = ModelPerformanceLogger()
         
     def load_performance_data(self) -> Dict:
         """Load performance data from disk"""
@@ -168,6 +175,15 @@ class ModelPerformanceTracker:
             status = 'slow'
         elif model_data['consecutive_failures'] >= self.thresholds['retirement_threshold']:
             status = 'failing'
+
+        # Log performance update if verbose
+        if self.verbose_logging and hasattr(self, 'verbose_logger'):
+            self.verbose_logger.log_performance_update(model, {
+                'success_rate': recent_success_rate,
+                'avg_response_time': avg_response_time,
+                'quality_score': composite_score,
+                'status': status
+            })
         
         return {
             'status': status,
@@ -186,7 +202,8 @@ class ModelPerformanceTracker:
             'keep': [],
             'remove': [],
             'add': [],
-            'reasons': {}
+            'reasons': {},
+            'performance_data': {} 
         }
         
         # Evaluate current models
@@ -194,6 +211,9 @@ class ModelPerformanceTracker:
         for model in current_models:
             evaluation = self.evaluate_model_performance(model)
             model_scores[model] = evaluation
+            
+            # Store performance data for logging
+            recommendations['performance_data'][model] = evaluation
             
             if evaluation['status'] in ['healthy', 'new', 'insufficient_data']:
                 recommendations['keep'].append(model)
@@ -226,6 +246,15 @@ class ModelPerformanceTracker:
                         if len(recommendations['add']) >= len(recommendations['remove']):
                             break
         
+        if self.verbose_logging and (recommendations['remove'] or recommendations['add']):
+            if hasattr(self, 'verbose_logger'):
+                self.verbose_logger.log_model_rotation(
+                    removed_models=recommendations['remove'],
+                    added_models=recommendations['add'],
+                    reasons=recommendations['reasons'],
+                    performance_data=recommendations['performance_data']
+                )
+
         return recommendations
     
     def get_performance_summary(self) -> str:

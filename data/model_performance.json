@@ -1,11 +1,11 @@
 {
   "models": {
     "llama3.2:3b": {
-      "total_queries": 9,
-      "successful_queries": 8,
-      "failed_queries": 1,
-      "times_selected": 3,
-      "total_response_time": 144.839091,
+      "total_queries": 14,
+      "successful_queries": 12,
+      "failed_queries": 2,
+      "times_selected": 4,
+      "total_response_time": 271.660685,
       "scores": [],
       "recent_performance": [
         {
@@ -79,17 +79,57 @@
           "selected": true,
           "consensus_score": 0.8607990728514461,
           "quality_score": 1.0
+        },
+        {
+          "timestamp": "2025-11-06T14:16:59.021146",
+          "success": false,
+          "response_time": 18.619068,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T14:21:06.132973",
+          "success": true,
+          "response_time": 23.019733,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T14:21:06.135347",
+          "success": true,
+          "response_time": 23.019733,
+          "selected": true,
+          "consensus_score": 0.830789214717778,
+          "quality_score": 1.0
+        },
+        {
+          "timestamp": "2025-11-06T14:28:00.537366",
+          "success": true,
+          "response_time": 31.08153,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T14:28:00.543116",
+          "success": true,
+          "response_time": 31.08153,
+          "selected": false,
+          "consensus_score": 0.6628289572565734,
+          "quality_score": 1.0
         }
       ],
       "consecutive_failures": 0,
       "added_date": "2025-11-06T11:22:52.412361"
     },
     "phi3.5:latest": {
-      "total_queries": 6,
-      "successful_queries": 6,
+      "total_queries": 8,
+      "successful_queries": 8,
       "failed_queries": 0,
-      "times_selected": 2,
-      "total_response_time": 173.53341200000003,
+      "times_selected": 3,
+      "total_response_time": 239.74285400000002,
       "scores": [],
       "recent_performance": [
         {
@@ -139,6 +179,22 @@
           "selected": false,
           "consensus_score": 0.6645248151396883,
           "quality_score": 0.909090909090909
+        },
+        {
+          "timestamp": "2025-11-06T14:28:00.537383",
+          "success": true,
+          "response_time": 33.104721,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T14:28:00.543132",
+          "success": true,
+          "response_time": 33.104721,
+          "selected": true,
+          "consensus_score": 0.6655582265012318,
+          "quality_score": 1.0
         }
       ],
       "consecutive_failures": 0,
@@ -225,11 +281,11 @@
       "added_date": "2025-11-06T11:22:52.412436"
     },
     "gemma2:2b": {
-      "total_queries": 3,
-      "successful_queries": 3,
-      "failed_queries": 0,
+      "total_queries": 8,
+      "successful_queries": 7,
+      "failed_queries": 1,
       "times_selected": 1,
-      "total_response_time": 15.692922,
+      "total_response_time": 150.574702,
       "scores": [],
       "recent_performance": [
         {
@@ -255,6 +311,46 @@
           "selected": false,
           "consensus_score": 0.8607990728514461,
           "quality_score": 0.9090909090909091
+        },
+        {
+          "timestamp": "2025-11-06T14:16:59.021183",
+          "success": false,
+          "response_time": 17.522094,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T14:21:06.132978",
+          "success": true,
+          "response_time": 23.71261,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T14:21:06.135779",
+          "success": true,
+          "response_time": 23.71261,
+          "selected": false,
+          "consensus_score": 0.8307892147177771,
+          "quality_score": 1.0
+        },
+        {
+          "timestamp": "2025-11-06T14:28:00.537393",
+          "success": true,
+          "response_time": 34.967233,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T14:28:00.543140",
+          "success": true,
+          "response_time": 34.967233,
+          "selected": false,
+          "consensus_score": 0.6615308853428095,
+          "quality_score": 1.0
         }
       ],
       "consecutive_failures": 0,
@@ -262,7 +358,7 @@
     }
   },
   "global_stats": {
-    "total_queries": 25,
+    "total_queries": 37,
     "start_date": "2025-11-06T11:21:59.856003"
   }
 }
