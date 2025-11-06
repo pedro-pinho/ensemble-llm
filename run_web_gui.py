@@ -9,12 +9,9 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ensemble_llm.web_server import app, create_html_file
+from ensemble_llm.web_server import app
 
 if __name__ == "__main__":
-    # Ensure HTML file exists
-    create_html_file()
-
     # Run the server
     print("\n" + "=" * 60)
     print("🚀 Starting Ensemble LLM Web GUI")

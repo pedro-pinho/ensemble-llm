@@ -1,18 +1,13 @@
 """FastAPI web server for Ensemble LLM GUI"""
 
 import asyncio
-import json
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from fastapi import (
-    FastAPI,
-    WebSocket,
-    WebSocketDisconnect,
-    Request,
-)
-from fastapi.responses import HTMLResponse, JSONResponse
+from typing import Dict, List, Optional
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
@@ -26,8 +21,16 @@ from .learning_system import CacheManager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("EnsembleLLM.WebServer")
 
+# Get the static directory path
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR.mkdir(exist_ok=True)
+
+# Ensure subdirectories exist
+(STATIC_DIR / "css").mkdir(exist_ok=True)
+(STATIC_DIR / "js").mkdir(exist_ok=True)
+
 # Session storage (in production, use Redis or similar)
-sessions: Dict[str, Dict] = {}
+sessions: Dict[str, "SessionData"] = {}
 active_websockets: Dict[str, List[WebSocket]] = defaultdict(list)
 
 
@@ -83,10 +86,14 @@ class LogStreamer:
         self.session = session
         self.model_colors = {
             "llama3.2:3b": "#3B82F6",  # Blue
+            "llama3.2:1b": "#60A5FA",  # Light Blue
             "phi3.5:latest": "#10B981",  # Emerald
+            "phi3.5": "#10B981",  # Emerald
             "qwen2.5:7b": "#F59E0B",  # Amber
             "mistral:7b-instruct-q4_K_M": "#EF4444",  # Red
+            "mistral:7b": "#EF4444",  # Red
             "gemma2:2b": "#8B5CF6",  # Violet
+            "gemma2:9b": "#7C3AED",  # Purple
             "tinyllama:1b": "#EC4899",  # Pink
             "codellama:7b": "#14B8A6",  # Teal
             "default": "#6B7280",  # Gray
@@ -164,6 +171,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 
 def get_or_create_session(session_id: Optional[str]) -> SessionData:
     """Get existing session or create new one"""
@@ -196,10 +206,6 @@ async def startup_event():
     """Initialize the server"""
     logger.info("Starting Ensemble LLM Web Server...")
 
-    # Create static directory if it doesn't exist
-    static_dir = Path(__file__).parent / "static"
-    static_dir.mkdir(exist_ok=True)
-
     # Periodic session cleanup
     async def cleanup_task():
         while True:
@@ -212,14 +218,15 @@ async def startup_event():
 @app.get("/")
 async def root():
     """Serve the main HTML page"""
-    html_path = Path(__file__).parent / "static" / "index.html"
+    html_path = STATIC_DIR / "index.html"
 
     if not html_path.exists():
-        # Create the HTML file if it doesn't exist
-        create_html_file()
+        return HTMLResponse(
+            content="<h1>Error: index.html not found. Please check the static directory.</h1>",
+            status_code=500,
+        )
 
-    with open(html_path, "r") as f:
-        return HTMLResponse(content=f.read())
+    return FileResponse(html_path)
 
 
 @app.get("/api/session")
@@ -237,7 +244,13 @@ async def get_session(request: Request):
     )
 
     if not session_id:
-        response.set_cookie("session_id", session.session_id, max_age=86400)
+        response.set_cookie(
+            "session_id",
+            session.session_id,
+            max_age=86400,
+            httponly=True,
+            samesite="lax",
+        )
 
     return response
 
@@ -316,8 +329,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     except WebSocketDisconnect:
         # Remove from active websockets
-        active_websockets[session_id].remove(websocket)
+        if websocket in active_websockets[session_id]:
+            active_websockets[session_id].remove(websocket)
         logger.info(f"WebSocket disconnected for session: {session_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error: {str(e)}")
+        if websocket in active_websockets[session_id]:
+            active_websockets[session_id].remove(websocket)
 
 
 async def process_query(
@@ -394,449 +412,15 @@ async def process_query(
         session.add_to_history(query, response, metadata)
 
     except Exception as e:
-        logger.error(f"Error processing query: {str(e)}")
+        logger.error(f"Error processing query: {str(e)}", exc_info=True)
         await log_streamer.send_log("error", {"message": f"Error: {str(e)}"})
 
     finally:
         session.is_processing = False
 
 
-def create_html_file():
-    """Create the HTML file with embedded CSS and JavaScript"""
-
-    html_content = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ensemble LLM Council</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>
-        /* Custom scrollbar for logs */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #1f2937;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #4b5563;
-            border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #6b7280;
-        }
-        
-        /* Log entry animations */
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-        .log-entry {
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        /* Model colors */
-        .model-llama { border-left: 4px solid #3B82F6; }
-        .model-phi { border-left: 4px solid #10B981; }
-        .model-qwen { border-left: 4px solid #F59E0B; }
-        .model-mistral { border-left: 4px solid #EF4444; }
-        .model-gemma { border-left: 4px solid #8B5CF6; }
-        .model-tinyllama { border-left: 4px solid #EC4899; }
-        .model-codellama { border-left: 4px solid #14B8A6; }
-    </style>
-</head>
-<body class="bg-gray-900 text-gray-100" x-data="ensembleApp()">
-    <div class="flex h-screen">
-        <!-- Sidebar for Logs -->
-        <div class="w-1/3 bg-gray-800 border-r border-gray-700 flex flex-col">
-            <div class="p-4 border-b border-gray-700">
-                <h2 class="text-xl font-bold text-gray-100">Voting Logs</h2>
-                <p class="text-xs text-gray-400 mt-1">Full model responses & voting details</p>
-            </div>
-            
-            <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2" x-ref="logsContainer">
-                <template x-for="log in logs" :key="log.timestamp">
-                    <div class="log-entry">
-                        <!-- Query Start -->
-                        <template x-if="log.type === 'query_start'">
-                            <div class="bg-blue-900/20 rounded p-3 mb-2">
-                                <div class="text-xs text-blue-400 mb-1" x-text="formatTime(log.timestamp)"></div>
-                                <div class="font-semibold text-blue-300">New Query:</div>
-                                <div class="text-sm mt-1" x-text="log.data.query"></div>
-                                <div class="text-xs text-gray-400 mt-1">
-                                    Models: <span x-text="log.data.models.join(', ')"></span>
-                                </div>
-                            </div>
-                        </template>
-                        
-                        <!-- Model Response -->
-                        <template x-if="log.type === 'model_response'">
-                            <div :class="getModelClass(log.data.model)" 
-                                 class="bg-gray-800/50 rounded p-3 mb-2">
-                                <div class="flex justify-between items-start mb-2">
-                                    <div>
-                                        <span class="font-semibold" :style="`color: ${log.data.color}`" 
-                                              x-text="log.data.model"></span>
-                                        <span x-show="log.data.success" class="text-green-400 text-xs ml-2">✓</span>
-                                        <span x-show="!log.data.success" class="text-red-400 text-xs ml-2">✗</span>
-                                    </div>
-                                    <span class="text-xs text-gray-400" 
-                                          x-text="`${log.data.response_time.toFixed(2)}s`"></span>
-                                </div>
-                                <div class="text-sm text-gray-200 whitespace-pre-wrap" 
-                                     x-text="log.data.response"></div>
-                            </div>
-                        </template>
-                        
-                        <!-- Voting Details -->
-                        <template x-if="log.type === 'voting'">
-                            <div class="bg-purple-900/20 rounded p-3 mb-2">
-                                <div class="font-semibold text-purple-300 mb-2">Voting Results:</div>
-                                <div class="text-xs space-y-1">
-                                    <div>Total Models: <span x-text="log.data.total_models"></span></div>
-                                    <div>Successful: <span x-text="log.data.successful_models"></span></div>
-                                    <div class="mt-2 font-semibold">Selected: 
-                                        <span class="text-green-400" x-text="log.data.selected_model"></span>
-                                    </div>
-                                    <div class="mt-2">Scores:</div>
-                                    <template x-for="(scores, model) in log.data.scores" :key="model">
-                                        <div class="ml-2 text-gray-300">
-                                            <span x-text="model"></span>:
-                                            <span class="text-yellow-400" x-text="scores.final.toFixed(3)"></span>
-                                            (C: <span x-text="scores.consensus.toFixed(2)"></span>,
-                                             Q: <span x-text="scores.quality.toFixed(2)"></span>)
-                                        </div>
-                                    </template>
-                                </div>
-                            </div>
-                        </template>
-                        
-                        <!-- Final Response -->
-                        <template x-if="log.type === 'final_response'">
-                            <div class="bg-green-900/20 rounded p-3 mb-2 border border-green-700">
-                                <div class="font-semibold text-green-300">Final Answer 
-                                    <span class="text-xs">
-                                        (via <span x-text="log.data.selected_model"></span>)
-                                    </span>
-                                </div>
-                                <div class="text-xs text-gray-400 mb-1">
-                                    Time: <span x-text="`${log.data.total_time.toFixed(2)}s`"></span>
-                                </div>
-                            </div>
-                        </template>
-                        
-                        <!-- Error -->
-                        <template x-if="log.type === 'error'">
-                            <div class="bg-red-900/20 rounded p-3 mb-2 border border-red-700">
-                                <div class="text-red-400" x-text="log.data.message"></div>
-                            </div>
-                        </template>
-                    </div>
-                </template>
-            </div>
-        </div>
-        
-        <!-- Main Chat Area -->
-        <div class="flex-1 flex flex-col bg-gray-900">
-            <!-- Header -->
-            <div class="bg-gray-800 border-b border-gray-700 p-4">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-100">Council of LLMs</h1>
-                        <p class="text-sm text-gray-400">Ensemble Intelligence System</p>
-                    </div>
-                    
-                    <!-- Settings -->
-                    <div class="flex items-center space-x-4">
-                        <!-- Speed Mode -->
-                        <div>
-                            <label class="text-xs text-gray-400">Speed</label>
-                            <select x-model="speedMode" 
-                                    class="ml-2 bg-gray-700 text-gray-200 text-sm rounded px-2 py-1">
-                                <option value="turbo">Turbo</option>
-                                <option value="fast">Fast</option>
-                                <option value="balanced">Balanced</option>
-                                <option value="quality">Quality</option>
-                            </select>
-                        </div>
-                        
-                        <!-- Web Search Toggle -->
-                        <label class="flex items-center cursor-pointer">
-                            <span class="text-sm mr-2">Web Search</span>
-                            <div class="relative">
-                                <input type="checkbox" x-model="webSearch" class="sr-only">
-                                <div class="w-10 h-5 bg-gray-600 rounded-full shadow-inner"></div>
-                                <div class="dot absolute w-4 h-4 bg-gray-300 rounded-full shadow 
-                                           -left-1 top-0.5 transition"
-                                     :class="{'translate-x-6 bg-green-400': webSearch}"></div>
-                            </div>
-                        </label>
-                        
-                        <!-- Reset Button -->
-                        <button @click="resetSession()" 
-                                class="bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1 rounded">
-                            Reset Session
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Chat Messages -->
-            <div class="flex-1 overflow-y-auto p-6" x-ref="chatContainer">
-                <template x-for="message in chatHistory" :key="message.timestamp">
-                    <div class="mb-6">
-                        <!-- User Query -->
-                        <div class="flex justify-end mb-4">
-                            <div class="bg-blue-600 text-white rounded-lg px-4 py-2 max-w-2xl">
-                                <div class="text-sm" x-text="message.query"></div>
-                                <div class="text-xs opacity-70 mt-1" x-text="formatTime(message.timestamp)"></div>
-                            </div>
-                        </div>
-                        
-                        <!-- AI Response -->
-                        <div class="flex justify-start">
-                            <div class="bg-gray-700 rounded-lg px-4 py-2 max-w-2xl">
-                                <div class="text-sm text-gray-200 whitespace-pre-wrap" 
-                                     x-text="message.response"></div>
-                                <div class="text-xs text-gray-400 mt-2">
-                                    <span x-text="message.metadata.selected_model"></span> •
-                                    <span x-text="`${message.metadata.total_ensemble_time?.toFixed(1)}s`"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </template>
-                
-                <!-- Loading Indicator -->
-                <div x-show="isProcessing" class="flex justify-start mb-4">
-                    <div class="bg-gray-700 rounded-lg px-4 py-2">
-                        <div class="flex items-center">
-                            <svg class="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" 
-                                        stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" 
-                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                            </svg>
-                            <span class="text-sm">Council is deliberating...</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Input Area -->
-            <div class="border-t border-gray-700 p-4 bg-gray-800">
-                <form @submit.prevent="sendQuery" class="flex space-x-2">
-                    <input type="text" 
-                           x-model="currentQuery"
-                           :disabled="isProcessing"
-                           placeholder="Ask your question to the council..."
-                           class="flex-1 bg-gray-700 text-gray-200 rounded-lg px-4 py-2 
-                                  focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    
-                    <button type="submit"
-                            :disabled="isProcessing || !currentQuery.trim()"
-                            class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 
-                                   text-white px-6 py-2 rounded-lg transition">
-                        <span x-show="!isProcessing">Send</span>
-                        <span x-show="isProcessing">Processing...</span>
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        function ensembleApp() {
-            return {
-                // WebSocket connection
-                ws: null,
-                sessionId: null,
-                
-                // UI State
-                currentQuery: '',
-                isProcessing: false,
-                webSearch: false,
-                speedMode: 'balanced',
-                
-                // Data
-                chatHistory: [],
-                logs: [],
-                
-                // Initialize
-                async init() {
-                    // Get or create session
-                    const response = await fetch('/api/session', {
-                        credentials: 'include'
-                    });
-                    const data = await response.json();
-                    
-                    this.sessionId = data.session_id;
-                    this.chatHistory = data.chat_history || [];
-                    this.webSearch = data.settings?.web_search || false;
-                    this.speedMode = data.settings?.speed_mode || 'balanced';
-                    
-                    // Connect WebSocket
-                    this.connectWebSocket();
-                    
-                    // Auto-scroll to bottom
-                    this.$nextTick(() => {
-                        this.scrollToBottom();
-                    });
-                },
-                
-                connectWebSocket() {
-                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${protocol}//${window.location.host}/ws/${this.sessionId}`;
-                    
-                    this.ws = new WebSocket(wsUrl);
-                    
-                    this.ws.onopen = () => {
-                        console.log('WebSocket connected');
-                        // Send ping every 30 seconds to keep connection alive
-                        setInterval(() => {
-                            if (this.ws.readyState === WebSocket.OPEN) {
-                                this.ws.send(JSON.stringify({type: 'ping'}));
-                            }
-                        }, 30000);
-                    };
-                    
-                    this.ws.onmessage = (event) => {
-                        const message = JSON.parse(event.data);
-                        this.handleWebSocketMessage(message);
-                    };
-                    
-                    this.ws.onclose = () => {
-                        console.log('WebSocket disconnected');
-                        // Reconnect after 3 seconds
-                        setTimeout(() => this.connectWebSocket(), 3000);
-                    };
-                    
-                    this.ws.onerror = (error) => {
-                        console.error('WebSocket error:', error);
-                    };
-                },
-                
-                handleWebSocketMessage(message) {
-                    switch (message.type) {
-                        case 'session_init':
-                            // Session initialized
-                            break;
-                            
-                        case 'query_start':
-                        case 'model_response':
-                        case 'voting':
-                        case 'error':
-                            // Add to logs
-                            this.logs.push(message);
-                            this.$nextTick(() => {
-                                this.$refs.logsContainer.scrollTop = this.$refs.logsContainer.scrollHeight;
-                            });
-                            break;
-                            
-                        case 'final_response':
-                            // Add to logs
-                            this.logs.push(message);
-                            
-                            // Add to chat history
-                            this.chatHistory.push({
-                                timestamp: new Date().toISOString(),
-                                query: this.currentQuery,
-                                response: message.data.response,
-                                metadata: message.data
-                            });
-                            
-                            // Clear input and stop processing
-                            this.currentQuery = '';
-                            this.isProcessing = false;
-                            
-                            // Scroll to bottom
-                            this.$nextTick(() => {
-                                this.scrollToBottom();
-                            });
-                            break;
-                    }
-                },
-                
-                async sendQuery() {
-                    if (!this.currentQuery.trim() || this.isProcessing) return;
-                    
-                    this.isProcessing = true;
-                    
-                    // Send query via WebSocket
-                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                        this.ws.send(JSON.stringify({
-                            type: 'query',
-                            query: this.currentQuery,
-                            web_search: this.webSearch,
-                            speed_mode: this.speedMode
-                        }));
-                    } else {
-                        console.error('WebSocket not connected');
-                        this.isProcessing = false;
-                    }
-                },
-                
-                async resetSession() {
-                    if (!confirm('Reset session and clear cache? This will delete all chat history.')) {
-                        return;
-                    }
-                    
-                    const response = await fetch('/api/reset', {
-                        method: 'POST',
-                        credentials: 'include'
-                    });
-                    
-                    if (response.ok) {
-                        // Clear local state
-                        this.chatHistory = [];
-                        this.logs = [];
-                        this.currentQuery = '';
-                        
-                        // Reload page to get fresh session
-                        window.location.reload();
-                    }
-                },
-                
-                formatTime(timestamp) {
-                    const date = new Date(timestamp);
-                    return date.toLocaleTimeString();
-                },
-                
-                getModelClass(model) {
-                    if (model.includes('llama')) return 'model-llama';
-                    if (model.includes('phi')) return 'model-phi';
-                    if (model.includes('qwen')) return 'model-qwen';
-                    if (model.includes('mistral')) return 'model-mistral';
-                    if (model.includes('gemma')) return 'model-gemma';
-                    if (model.includes('tinyllama')) return 'model-tinyllama';
-                    if (model.includes('codellama')) return 'model-codellama';
-                    return '';
-                },
-                
-                scrollToBottom() {
-                    if (this.$refs.chatContainer) {
-                        this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
-                    }
-                }
-            }
-        }
-    </script>
-</body>
-</html>"""
-
-    # Save HTML file
-    static_dir = Path(__file__).parent / "static"
-    static_dir.mkdir(exist_ok=True)
-
-    with open(static_dir / "index.html", "w") as f:
-        f.write(html_content)
-
-    logger.info("Created index.html file")
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "sessions": len(sessions)}

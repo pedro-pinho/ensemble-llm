@@ -4,59 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ensemble LLM Council</title>
+    
+    <!-- External CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+    
+    <!-- Alpine.js for reactivity -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>
-        /* Custom scrollbar for logs */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #1f2937;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #4b5563;
-            border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #6b7280;
-        }
-        
-        /* Log entry animations */
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-        .log-entry {
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        /* Model colors */
-        .model-llama { border-left: 4px solid #3B82F6; }
-        .model-phi { border-left: 4px solid #10B981; }
-        .model-qwen { border-left: 4px solid #F59E0B; }
-        .model-mistral { border-left: 4px solid #EF4444; }
-        .model-gemma { border-left: 4px solid #8B5CF6; }
-        .model-tinyllama { border-left: 4px solid #EC4899; }
-        .model-codellama { border-left: 4px solid #14B8A6; }
-    </style>
 </head>
 <body class="bg-gray-900 text-gray-100" x-data="ensembleApp()">
     <div class="flex h-screen">
         <!-- Sidebar for Logs -->
-        <div class="w-1/3 bg-gray-800 border-r border-gray-700 flex flex-col">
-            <div class="p-4 border-b border-gray-700">
+        <aside class="w-1/3 bg-gray-800 border-r border-gray-700 flex flex-col">
+            <header class="p-4 border-b border-gray-700">
                 <h2 class="text-xl font-bold text-gray-100">Voting Logs</h2>
                 <p class="text-xs text-gray-400 mt-1">Full model responses & voting details</p>
-            </div>
+            </header>
             
-            <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2" x-ref="logsContainer">
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2" 
+                 x-ref="logsContainer" 
+                 id="logs-container">
                 <template x-for="log in logs" :key="log.timestamp">
                     <div class="log-entry">
                         <!-- Query Start -->
@@ -136,22 +105,22 @@
                     </div>
                 </template>
             </div>
-        </div>
+        </aside>
         
         <!-- Main Chat Area -->
-        <div class="flex-1 flex flex-col bg-gray-900">
-            <!-- Header -->
-            <div class="bg-gray-800 border-b border-gray-700 p-4">
+        <main class="flex-1 flex flex-col bg-gray-900">
+            <!-- Header with Settings -->
+            <header class="bg-gray-800 border-b border-gray-700 p-4">
                 <div class="flex justify-between items-center">
-                    <div>
+                    <div class="header-title">
                         <h1 class="text-2xl font-bold text-gray-100">Council of LLMs</h1>
                         <p class="text-sm text-gray-400">Ensemble Intelligence System</p>
                     </div>
                     
-                    <!-- Settings -->
+                    <!-- Settings Controls -->
                     <div class="flex items-center space-x-4">
-                        <!-- Speed Mode -->
-                        <div>
+                        <!-- Speed Mode Selector -->
+                        <div class="control-group">
                             <label class="text-xs text-gray-400">Speed</label>
                             <select x-model="speedMode" 
                                     class="ml-2 bg-gray-700 text-gray-200 text-sm rounded px-2 py-1">
@@ -181,7 +150,7 @@
                         </button>
                     </div>
                 </div>
-            </div>
+            </header>
             
             <!-- Chat Messages -->
             <div class="flex-1 overflow-y-auto p-6" x-ref="chatContainer">
@@ -226,7 +195,7 @@
             </div>
             
             <!-- Input Area -->
-            <div class="border-t border-gray-700 p-4 bg-gray-800">
+            <footer class="border-t border-gray-700 p-4 bg-gray-800">
                 <form @submit.prevent="sendQuery" class="flex space-x-2">
                     <input type="text" 
                            x-model="currentQuery"
@@ -243,185 +212,11 @@
                         <span x-show="isProcessing">Processing...</span>
                     </button>
                 </form>
-            </div>
-        </div>
+            </footer>
+        </main>
     </div>
     
-    <script>
-        function ensembleApp() {
-            return {
-                // WebSocket connection
-                ws: null,
-                sessionId: null,
-                
-                // UI State
-                currentQuery: '',
-                isProcessing: false,
-                webSearch: false,
-                speedMode: 'balanced',
-                
-                // Data
-                chatHistory: [],
-                logs: [],
-                
-                // Initialize
-                async init() {
-                    // Get or create session
-                    const response = await fetch('/api/session', {
-                        credentials: 'include'
-                    });
-                    const data = await response.json();
-                    
-                    this.sessionId = data.session_id;
-                    this.chatHistory = data.chat_history || [];
-                    this.webSearch = data.settings?.web_search || false;
-                    this.speedMode = data.settings?.speed_mode || 'balanced';
-                    
-                    // Connect WebSocket
-                    this.connectWebSocket();
-                    
-                    // Auto-scroll to bottom
-                    this.$nextTick(() => {
-                        this.scrollToBottom();
-                    });
-                },
-                
-                connectWebSocket() {
-                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${protocol}//${window.location.host}/ws/${this.sessionId}`;
-                    
-                    this.ws = new WebSocket(wsUrl);
-                    
-                    this.ws.onopen = () => {
-                        console.log('WebSocket connected');
-                        // Send ping every 30 seconds to keep connection alive
-                        setInterval(() => {
-                            if (this.ws.readyState === WebSocket.OPEN) {
-                                this.ws.send(JSON.stringify({type: 'ping'}));
-                            }
-                        }, 30000);
-                    };
-                    
-                    this.ws.onmessage = (event) => {
-                        const message = JSON.parse(event.data);
-                        this.handleWebSocketMessage(message);
-                    };
-                    
-                    this.ws.onclose = () => {
-                        console.log('WebSocket disconnected');
-                        // Reconnect after 3 seconds
-                        setTimeout(() => this.connectWebSocket(), 3000);
-                    };
-                    
-                    this.ws.onerror = (error) => {
-                        console.error('WebSocket error:', error);
-                    };
-                },
-                
-                handleWebSocketMessage(message) {
-                    switch (message.type) {
-                        case 'session_init':
-                            // Session initialized
-                            break;
-                            
-                        case 'query_start':
-                        case 'model_response':
-                        case 'voting':
-                        case 'error':
-                            // Add to logs
-                            this.logs.push(message);
-                            this.$nextTick(() => {
-                                this.$refs.logsContainer.scrollTop = this.$refs.logsContainer.scrollHeight;
-                            });
-                            break;
-                            
-                        case 'final_response':
-                            // Add to logs
-                            this.logs.push(message);
-                            
-                            // Add to chat history
-                            this.chatHistory.push({
-                                timestamp: new Date().toISOString(),
-                                query: this.currentQuery,
-                                response: message.data.response,
-                                metadata: message.data
-                            });
-                            
-                            // Clear input and stop processing
-                            this.currentQuery = '';
-                            this.isProcessing = false;
-                            
-                            // Scroll to bottom
-                            this.$nextTick(() => {
-                                this.scrollToBottom();
-                            });
-                            break;
-                    }
-                },
-                
-                async sendQuery() {
-                    if (!this.currentQuery.trim() || this.isProcessing) return;
-                    
-                    this.isProcessing = true;
-                    
-                    // Send query via WebSocket
-                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                        this.ws.send(JSON.stringify({
-                            type: 'query',
-                            query: this.currentQuery,
-                            web_search: this.webSearch,
-                            speed_mode: this.speedMode
-                        }));
-                    } else {
-                        console.error('WebSocket not connected');
-                        this.isProcessing = false;
-                    }
-                },
-                
-                async resetSession() {
-                    if (!confirm('Reset session and clear cache? This will delete all chat history.')) {
-                        return;
-                    }
-                    
-                    const response = await fetch('/api/reset', {
-                        method: 'POST',
-                        credentials: 'include'
-                    });
-                    
-                    if (response.ok) {
-                        // Clear local state
-                        this.chatHistory = [];
-                        this.logs = [];
-                        this.currentQuery = '';
-                        
-                        // Reload page to get fresh session
-                        window.location.reload();
-                    }
-                },
-                
-                formatTime(timestamp) {
-                    const date = new Date(timestamp);
-                    return date.toLocaleTimeString();
-                },
-                
-                getModelClass(model) {
-                    if (model.includes('llama')) return 'model-llama';
-                    if (model.includes('phi')) return 'model-phi';
-                    if (model.includes('qwen')) return 'model-qwen';
-                    if (model.includes('mistral')) return 'model-mistral';
-                    if (model.includes('gemma')) return 'model-gemma';
-                    if (model.includes('tinyllama')) return 'model-tinyllama';
-                    if (model.includes('codellama')) return 'model-codellama';
-                    return '';
-                },
-                
-                scrollToBottom() {
-                    if (this.$refs.chatContainer) {
-                        this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Load our JavaScript -->
+    <script src="/static/js/app.js"></script>
 </body>
 </html>

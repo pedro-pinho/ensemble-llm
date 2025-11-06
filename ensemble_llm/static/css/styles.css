@@ -1,0 +1,52 @@
+/* Custom scrollbar for logs */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Log entry animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.log-entry {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Model colors */
+.model-llama {
+  border-left: 4px solid #3b82f6;
+}
+.model-phi {
+  border-left: 4px solid #10b981;
+}
+.model-qwen {
+  border-left: 4px solid #f59e0b;
+}
+.model-mistral {
+  border-left: 4px solid #ef4444;
+}
+.model-gemma {
+  border-left: 4px solid #8b5cf6;
+}
+.model-tinyllama {
+  border-left: 4px solid #ec4899;
+}
+.model-codellama {
+  border-left: 4px solid #14b8a6;
+}
