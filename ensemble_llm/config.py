@@ -396,3 +396,54 @@ TRACKING_CONFIG = {
     'cleanup_interval': 100,
     'max_history_days': 30
 }
+
+# Speed Optimization Profiles
+SPEED_PROFILES = {
+    'turbo': {
+        'max_models': 2,
+        'timeout': 10,
+        'num_predict': 200,
+        'temperature': 0.5,
+        'strategy': 'race'
+    },
+    'fast': {
+        'max_models': 3,
+        'timeout': 15,
+        'num_predict': 300,
+        'temperature': 0.6,
+        'strategy': 'cascade'
+    },
+    'balanced': {
+        'max_models': 4,
+        'timeout': 25,
+        'num_predict': 512,
+        'temperature': 0.7,
+        'strategy': 'parallel'
+    },
+    'quality': {
+        'max_models': 5,
+        'timeout': 40,
+        'num_predict': 768,
+        'temperature': 0.8,
+        'strategy': 'parallel'
+    }
+}
+
+# Fast model configurations (override main configs for speed)
+FAST_MODEL_CONFIGS = {
+    'tinyllama:1b': {'timeout': 5, 'priority': 1},
+    'llama3.2:1b': {'timeout': 5, 'priority': 1},
+    'gemma2:2b': {'timeout': 8, 'priority': 2},
+    'llama3.2:3b': {'timeout': 10, 'priority': 3},
+    'phi3.5:latest': {'timeout': 12, 'priority': 4},
+    'qwen2.5:7b': {'timeout': 15, 'priority': 5},
+    'mistral:7b-instruct-q4_K_M': {'timeout': 15, 'priority': 5}
+}
+
+# Optimal model selection by speed
+SPEED_OPTIMIZED_MODELS = {
+    'turbo': ['tinyllama:1b', 'gemma2:2b'],
+    'fast': ['gemma2:2b', 'llama3.2:3b', 'phi3.5:latest'],
+    'balanced': ['llama3.2:3b', 'phi3.5:latest', 'qwen2.5:7b'],
+    'quality': DEFAULT_MODELS
+}

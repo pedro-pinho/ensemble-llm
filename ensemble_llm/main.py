@@ -19,18 +19,20 @@ from .config import (
     DEFAULT_MODELS, MODEL_CONFIGS, WEB_SEARCH_CONFIG, ENSEMBLE_CONFIG,
     SYSTEM_CONFIGS, PERFORMANCE_THRESHOLDS, MODEL_POOLS, QUERY_PATTERNS,
     LOGGING_CONFIG, TRACKING_CONFIG, OLLAMA_ENDPOINTS, GENERATION_OPTIONS,
-    FEATURES, DISPLAY_CONFIG, ERROR_MESSAGES, SUCCESS_MESSAGES, SMART_LEARNING_CONFIG
+    FEATURES, DISPLAY_CONFIG, ERROR_MESSAGES, SUCCESS_MESSAGES, SMART_LEARNING_CONFIG,
+    SPEED_PROFILES, SPEED_OPTIMIZED_MODELS, FAST_MODEL_CONFIGS
 )
 from .performance_tracker import ModelPerformanceTracker, AdaptiveModelManager
 from .learning_system import (
     SmartEnsembleOrchestrator, QueryCache, ModelOptimizer, 
     QueryPatternLearner, PrecomputeManager
 )
+from .fast_mode import FastModeOrchestrator, TurboMode, ModelWarmup
 
 class EnsembleLLM:
     def __init__(self, models: List[str] = None, ollama_host: str = None, 
                  enable_web_search: bool = None, adaptive_mode: bool = None,
-                 smart_learning: bool = True):
+                 smart_learning: bool = True, speed_mode: str = 'balanced'):
         
         # Use config values with overrides
         self.host = ollama_host or OLLAMA_ENDPOINTS['default_host']
@@ -90,11 +92,41 @@ class EnsembleLLM:
         else:
             self.orchestrator = None
             self.precompute_manager = None
+
+        # Speed optimization
+        self.speed_mode = speed_mode
+        self.speed_profile = SPEED_PROFILES.get(speed_mode, SPEED_PROFILES['balanced'])
+        
+        # Initialize fast mode components
+        self.fast_orchestrator = FastModeOrchestrator()
+        self.turbo_mode = TurboMode(self.host)
+        self.model_warmup = ModelWarmup(self.host)
+
+        # Optimize model selection based on speed mode
+        if speed_mode in SPEED_OPTIMIZED_MODELS:
+            available_models = SPEED_OPTIMIZED_MODELS[speed_mode]
+            # Only use models that are available
+            self.models = [m for m in available_models if m in (models or DEFAULT_MODELS)]
+            if not self.models:
+                self.models = models or DEFAULT_MODELS
+            
+            # Limit number of models based on speed profile
+            self.models = self.models[:self.speed_profile['max_models']]
+            
+            self.logger.info(f"Speed mode '{speed_mode}' active: Using {len(self.models)} models")
+    
     
     async def initialize(self):
         """Async initialization - preload models and resolve names"""
         # Resolve model names to actual tags
         self.models = await self.resolve_model_names(self.models)
+
+        # Warmup models for faster first response
+        if self.speed_mode in ['turbo', 'fast']:
+            await self.model_warmup.parallel_warmup(
+                self.models, 
+                max_concurrent=2
+            )
         
         if self.model_manager and FEATURES['staggered_starts']:
             # Preload models with staggered starts
@@ -252,6 +284,124 @@ class EnsembleLLM:
         
         return None
     
+    async def query_model_fast(self, model: str, prompt: str) -> Dict:
+        """Fast query implementation"""
+        
+        if self.speed_mode == 'turbo':
+            # Use turbo mode for ultra-fast responses
+            return await self.turbo_mode.turbo_query(model, prompt)
+        
+        # Use speed-optimized parameters
+        start_time = datetime.now()
+        
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": self.speed_profile['temperature'],
+                    "num_predict": self.speed_profile['num_predict'],
+                    "num_ctx": 2048 if self.speed_mode != 'turbo' else 1024,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1,
+                    "num_thread": 4  # Limit CPU threads
+                },
+                "keep_alive": "5m"  # Keep model loaded
+            }
+            
+            # Get timeout from fast model configs or speed profile
+            timeout = FAST_MODEL_CONFIGS.get(model, {}).get('timeout', 
+                                            self.speed_profile['timeout'])
+            
+            try:
+                async with session.post(
+                    f"{self.host}/api/generate",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(
+                        total=timeout,
+                        connect=2,  # Fast connect timeout
+                        sock_read=timeout
+                    )
+                ) as response:
+                    
+                    if response.status == 200:
+                        result = await response.json()
+                        
+                        return {
+                            "model": model,
+                            "response": result.get("response", ""),
+                            "success": True,
+                            "response_time": (datetime.now() - start_time).total_seconds(),
+                            "speed_mode": self.speed_mode
+                        }
+                    else:
+                        return {
+                            "model": model,
+                            "response": f"HTTP {response.status}",
+                            "success": False,
+                            "response_time": (datetime.now() - start_time).total_seconds()
+                        }
+                        
+            except asyncio.TimeoutError:
+                self.logger.warning(f"Fast timeout for {model} after {timeout}s")
+                return {
+                    "model": model,
+                    "response": f"Timeout ({timeout}s)",
+                    "success": False,
+                    "response_time": (datetime.now() - start_time).total_seconds()
+                }
+            except Exception as e:
+                return {
+                    "model": model,
+                    "response": str(e)[:100],
+                    "success": False,
+                    "response_time": (datetime.now() - start_time).total_seconds()
+                }
+
+    async def query_all_models_fast(self, prompt: str) -> List[Dict]:
+        """Query models using fast strategies"""
+        
+        strategy = self.speed_profile['strategy']
+        
+        if strategy == 'race':
+            # Race strategy: return as soon as we get 1-2 good responses
+            min_responses = 1 if self.speed_mode == 'turbo' else 2
+            
+            results = await self.fast_orchestrator.race_strategy(
+                self.query_model_fast,
+                self.models,
+                prompt,
+                min_responses=min_responses
+            )
+            
+        elif strategy == 'cascade':
+            # Cascade strategy: start with fast model, add more if needed
+            results = await self.fast_orchestrator.cascade_strategy(
+                self.query_model_fast,
+                self.models,
+                prompt,
+                cascade_delay=2.0
+            )
+            
+        elif strategy == 'single':
+            # Single best model
+            results = await self.fast_orchestrator.single_best_strategy(
+                self.query_model_fast,
+                self.models[0],
+                prompt
+            )
+            
+        else:
+            # Parallel strategy (default)
+            tasks = []
+            for model in self.models:
+                tasks.append(self.query_model_fast(model, prompt))
+            
+            results = await asyncio.gather(*tasks)
+        
+        return results
+
     async def enhance_prompt_with_web_search(self, prompt: str) -> Tuple[str, bool]:
         """Enhance prompt with web search results if needed"""
         
@@ -713,16 +863,21 @@ class EnsembleLLM:
             if cached_result:
                 response, metadata = cached_result
                 
-                # Add cache info to metadata
-                metadata['from_cache'] = True
-                metadata['total_ensemble_time'] = 0.01  # Near instant
-                
-                if verbose:
-                    cache_similarity = metadata.get('cache_similarity', 1.0)
-                    print(f"\n{'🎯' if DISPLAY_CONFIG['use_emojis'] else ''} "
-                          f"Using cached result (similarity: {cache_similarity:.2f})")
-                
-                return response, metadata
+                # Double-check the cached response is valid
+                if response and not metadata.get('all_failed'):
+                    metadata['from_cache'] = True
+                    metadata['total_ensemble_time'] = 0.01
+                    
+                    if verbose:
+                        cache_similarity = metadata.get('cache_similarity', 1.0)
+                        print(f"\n{'🎯' if DISPLAY_CONFIG['use_emojis'] else ''} "
+                            f"Using cached result (similarity: {cache_similarity:.2f})")
+                    
+                    return response, metadata
+                else:
+                    # Invalid cache, proceed with normal query
+                    self.logger.warning("Invalid cached response, proceeding with fresh query")
+        
         
         # Detect query type if specialized selection is enabled
         query_type = None
@@ -742,11 +897,29 @@ class EnsembleLLM:
             if FEATURES['caching']:
                 self.model_availability_cache = {}
         
-        self.logger.info(f"Starting ensemble query #{self.query_count}")
+        self.logger.info(f"Starting query in {self.speed_mode} mode with {len(self.models)} models")
         
-        # Query all models
-        responses = await self.query_all_models_optimized(prompt)
+        if self.speed_mode in ['turbo', 'fast']:
+            responses = await self.query_all_models_fast(prompt)
+        else:
+            responses = await self.query_all_models_optimized(prompt)
         
+        # For turbo mode, skip complex voting if we only have 1-2 responses
+        if self.speed_mode == 'turbo' and len(responses) <= 2:
+            # Just return the first successful response
+            for response in responses:
+                if response['success']:
+                    metadata = {
+                        "selected_model": response['model'],
+                        "total_ensemble_time": (datetime.now() - start_time).total_seconds(),
+                        "speed_mode": self.speed_mode,
+                        "strategy": self.speed_profile['strategy']
+                    }
+                    
+                    self.logger.info(f"Turbo mode completed in {metadata['total_ensemble_time']:.2f}s")
+                    
+                    return response['response'], metadata
+
         # Voting and selection
         best_response, metadata = self.weighted_voting(responses)
         
@@ -1016,6 +1189,15 @@ async def main():
                     help='Clear smart cache and start fresh')
     parser.add_argument('--insights', action='store_true',
                     help='Show smart learning insights')
+    parser.add_argument('--speed', choices=['turbo', 'fast', 'balanced', 'quality'],
+                       default='balanced',
+                       help='Speed optimization mode')
+    parser.add_argument('--warmup', action='store_true',
+                       help='Warmup models before querying')
+    parser.add_argument('--clear-failed-cache', action='store_true',
+                    help='Clear only failed cached responses')
+    parser.add_argument('--cache-stats', action='store_true',
+                    help='Show cache statistics')
     
     args = parser.parse_args()
     
@@ -1052,6 +1234,16 @@ async def main():
         )
         await ensemble.show_smart_insights()
         return
+
+    if args.clear_failed_cache:
+        from .learning_system import CacheManager
+        CacheManager.clear_failed_cache()
+        return
+
+    if args.cache_stats:
+        from .learning_system import CacheManager
+        CacheManager.show_cache_stats()
+        return
     
     # Display startup banner
     use_emojis = DISPLAY_CONFIG['use_emojis']
@@ -1063,6 +1255,12 @@ async def main():
     print(f"{'🧠 ' if use_emojis else ''}Adaptive Mode: {'Enabled' if not args.no_adaptive and FEATURES['adaptive_models'] else 'Disabled'}")
     print(f"{'📝 ' if use_emojis else ''}Log Level: {args.log_level}")
     print(f"{'📄 ' if use_emojis else ''}Log File: {LOGGING_CONFIG['log_dir']}/{LOGGING_CONFIG['log_file']}")
+    print(f"{'⚡ ' if use_emojis else ''}Speed Mode: {args.speed}")
+    if args.speed == 'turbo':
+        print("   Ultra-fast mode: 2 models, 10s timeout, race strategy")
+    elif args.speed == 'fast':
+        print("   Fast mode: 3 models, 15s timeout, cascade strategy")
+    
     print(f"{'='*60}\n")
     
     # Initialize ensemble
@@ -1071,8 +1269,13 @@ async def main():
         ollama_host=args.host,
         enable_web_search=args.web_search or None,
         adaptive_mode=not args.no_adaptive if not args.no_adaptive else None,
-        smart_learning=not args.no_smart and SMART_LEARNING_CONFIG['enabled']
+        smart_learning=not args.no_smart and SMART_LEARNING_CONFIG['enabled'],
+        speed_mode=args.speed
     )
+
+    if args.warmup:
+        print("🔥 Warming up models...")
+        await ensemble.model_warmup.parallel_warmup(ensemble.models)
     
     # Initialize (preload models)
     print(f"{'🔄 ' if use_emojis else ''}Initializing models...")

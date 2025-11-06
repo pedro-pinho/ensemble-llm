@@ -14,6 +14,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 import logging
+from .config import ERROR_MESSAGES
 
 class QueryCache:
     """Intelligent query caching with similarity matching"""
@@ -418,16 +419,43 @@ class SmartEnsembleOrchestrator:
             json.dump(self.session_data, f, indent=2)
     
     async def check_cache(self, query: str) -> Optional[Tuple[str, Dict]]:
-        """Check if query result is cached"""
+        """Check if query result is cached - with validation"""
         
         # Check exact match first
         query_hash = self.query_cache.get_query_hash(query)
         cached = self.query_cache.get_cached_response(query_hash)
         
         if cached:
+            # Validate cached response before returning
+            response = cached.get('response', '')
+            metadata = cached.get('metadata', {})
+            
+            # Check if this was a failed response
+            if (not response or 
+                'all_failed' in metadata or 
+                metadata.get('error') or
+                response == ERROR_MESSAGES.get('all_failed', 'All models failed')):
+                
+                # Remove bad cache entry
+                self.logger.warning(f"Removing invalid cache entry for query: {query[:50]}...")
+                cache_file = self.query_cache.cache_dir / f"{query_hash}.pkl"
+                if cache_file.exists():
+                    cache_file.unlink()
+                
+                # Remove from index
+                if query in self.query_cache.cache_index['queries']:
+                    idx = self.query_cache.cache_index['queries'].index(query)
+                    self.query_cache.cache_index['queries'].pop(idx)
+                    self.query_cache.cache_index['hashes'].pop(idx)
+                    self.query_cache.cache_index['timestamps'].pop(idx)
+                    self.query_cache.cache_index['hit_counts'].pop(idx)
+                    self.query_cache.save_cache_index()
+                
+                return None  # Don't use invalid cache
+            
             self.session_data['cache_hits'] += 1
             self.logger.info(f"Cache hit (exact match) - {self.session_data['cache_hits']} total hits")
-            return cached['response'], cached['metadata']
+            return response, metadata
         
         # Check for similar query
         similar_result = self.query_cache.find_similar_query(query)
@@ -437,23 +465,38 @@ class SmartEnsembleOrchestrator:
             cached = self.query_cache.get_cached_response(similar_hash)
             
             if cached:
+                response = cached.get('response', '')
+                metadata = cached.get('metadata', {})
+                
+                # Validate similar cache too
+                if (not response or 
+                    'all_failed' in metadata or 
+                    metadata.get('error')):
+                    return None
+                
                 self.session_data['cache_hits'] += 1
                 self.logger.info(f"Cache hit (similarity: {similarity:.2f}) - {self.session_data['cache_hits']} total hits")
                 
-                # Add a note about using cached result
-                metadata = cached['metadata'].copy()
                 metadata['cache_similarity'] = similarity
-                
-                return cached['response'], metadata
+                return response, metadata
         
         return None
-    
+
     def update_learning(self, query: str, response: str, metadata: Dict, 
                        model_performances: List[Dict]):
         """Update all learning components"""
         
-        # Cache the response
-        self.query_cache.cache_response(query, response, metadata)
+        if (response and 
+            not metadata.get('all_failed') and 
+            not metadata.get('error') and
+            response != ERROR_MESSAGES.get('all_failed', 'All models failed')):
+            
+            # Cache the successful response
+            self.query_cache.cache_response(query, response, metadata)
+            self.logger.debug(f"Cached successful response for: {query[:50]}...")
+        else:
+            self.logger.debug(f"Not caching failed response for: {query[:50]}...")
+        
         
         # Update model optimizations
         for perf in model_performances:
@@ -615,3 +658,83 @@ class PrecomputeManager:
                     return data['response']
         
         return None
+
+class CacheManager:
+    """Utilities for cache management"""
+    
+    @staticmethod
+    def clear_all_cache(cache_dir: str = "smart_data/cache"):
+        """Clear all cached responses"""
+        import shutil
+        from pathlib import Path
+        
+        cache_path = Path(cache_dir)
+        if cache_path.exists():
+            shutil.rmtree(cache_path)
+            cache_path.mkdir(exist_ok=True)
+            print(f"✅ Cleared all cache in {cache_dir}")
+    
+    @staticmethod
+    def clear_failed_cache(cache_dir: str = "smart_data/cache"):
+        """Clear only failed/invalid cached responses"""
+        from pathlib import Path
+        import pickle
+        
+        cache_path = Path(cache_dir)
+        removed_count = 0
+        
+        for cache_file in cache_path.glob("*.pkl"):
+            try:
+                with open(cache_file, 'rb') as f:
+                    data = pickle.load(f)
+                    
+                response = data.get('response', '')
+                metadata = data.get('metadata', {})
+                
+                # Check if this is a failed response
+                if (not response or 
+                    'all_failed' in metadata or 
+                    metadata.get('error') or
+                    'All models failed' in response):
+                    
+                    cache_file.unlink()
+                    removed_count += 1
+                    print(f"❌ Removed failed cache: {data.get('query', 'unknown')[:50]}...")
+                    
+            except Exception as e:
+                print(f"Error checking {cache_file}: {e}")
+        
+        print(f"✅ Removed {removed_count} failed cache entries")
+        
+    @staticmethod
+    def show_cache_stats(cache_dir: str = "smart_data/cache"):
+        """Show cache statistics"""
+        from pathlib import Path
+        import pickle
+        
+        cache_path = Path(cache_dir)
+        total = 0
+        failed = 0
+        
+        for cache_file in cache_path.glob("*.pkl"):
+            try:
+                with open(cache_file, 'rb') as f:
+                    data = pickle.load(f)
+                    total += 1
+                    
+                    response = data.get('response', '')
+                    metadata = data.get('metadata', {})
+                    
+                    if (not response or 
+                        'all_failed' in metadata or 
+                        metadata.get('error')):
+                        failed += 1
+                        
+            except:
+                pass
+        
+        print(f"📊 Cache Statistics:")
+        print(f"   Total entries: {total}")
+        print(f"   Failed entries: {failed}")
+        print(f"   Valid entries: {total - failed}")
+        print(f"   Cache health: {((total-failed)/max(1,total))*100:.1f}%")
