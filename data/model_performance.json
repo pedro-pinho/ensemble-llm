@@ -1,11 +1,11 @@
 {
   "models": {
     "llama3.2:3b": {
-      "total_queries": 14,
-      "successful_queries": 12,
+      "total_queries": 16,
+      "successful_queries": 14,
       "failed_queries": 2,
-      "times_selected": 4,
-      "total_response_time": 271.660685,
+      "times_selected": 5,
+      "total_response_time": 325.36857100000003,
       "scores": [],
       "recent_performance": [
         {
@@ -118,6 +118,22 @@
           "response_time": 31.08153,
           "selected": false,
           "consensus_score": 0.6628289572565734,
+          "quality_score": 1.0
+        },
+        {
+          "timestamp": "2025-11-06T15:15:50.486968",
+          "success": true,
+          "response_time": 26.853943,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T15:15:50.499377",
+          "success": true,
+          "response_time": 26.853943,
+          "selected": true,
+          "consensus_score": 0.8501828245431065,
           "quality_score": 1.0
         }
       ],
@@ -281,11 +297,11 @@
       "added_date": "2025-11-06T11:22:52.412436"
     },
     "gemma2:2b": {
-      "total_queries": 8,
-      "successful_queries": 7,
+      "total_queries": 9,
+      "successful_queries": 8,
       "failed_queries": 1,
       "times_selected": 1,
-      "total_response_time": 150.574702,
+      "total_response_time": 174.95532500000002,
       "scores": [],
       "recent_performance": [
         {
@@ -351,6 +367,14 @@
           "selected": false,
           "consensus_score": 0.6615308853428095,
           "quality_score": 1.0
+        },
+        {
+          "timestamp": "2025-11-06T15:15:50.487013",
+          "success": true,
+          "response_time": 24.380623,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
         }
       ],
       "consecutive_failures": 0,
@@ -358,7 +382,7 @@
     }
   },
   "global_stats": {
-    "total_queries": 37,
+    "total_queries": 40,
     "start_date": "2025-11-06T11:21:59.856003"
   }
 }

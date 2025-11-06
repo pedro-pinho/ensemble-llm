@@ -81,9 +81,9 @@ async def benchmark_gpu():
         print(f"Models: {', '.join(config['models'])}")
 
         # Import and test
-        from ensemble_llm.main import OptimizedEnsembleLLM
+        from ensemble_llm.main import EnsembleLLM
 
-        ensemble = OptimizedEnsembleLLM(models=config["models"], speed_mode="fast")
+        ensemble = EnsembleLLM(models=config["models"], speed_mode="fast")
 
         try:
             await ensemble.initialize()
