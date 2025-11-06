@@ -84,7 +84,7 @@ echo -e "${GREEN}✅ Dependencies installed${NC}"
 # Pull models
 echo ""
 echo "📦 Downloading models (this may take a while)..."
-MODELS=("llama3.2:3b" "phi3.5" "qwen2.5:7b" "mistral:7b-instruct-q4_K_M" "gemma2:2b")
+MODELS=("llama3.2:3b" "phi3.5:latest" "qwen2.5:7b" "mistral:7b-instruct-q4_K_M" "gemma2:2b")
 
 for model in "${MODELS[@]}"; do
     echo -n "  Pulling $model... "

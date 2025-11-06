@@ -19,7 +19,7 @@ ollama list
 
 # Check each model
 echo -e "\n🧪 Testing Models:"
-for model in llama3.2:3b phi3.5 qwen2.5:7b mistral:7b-instruct-q4_K_M gemma2:2b; do
+for model in llama3.2:3b phi3.5:latest qwen2.5:7b mistral:7b-instruct-q4_K_M gemma2:2b; do
     echo -n "Testing $model... "
     if ollama run $model "Hi" > /dev/null 2>&1; then
         echo "✅ OK"

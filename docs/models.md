@@ -9,7 +9,7 @@ Total Memory: ~12GB for models + 4GB system
 
 Recommended Setup:
 - llama3.2:3b (3GB)
-- phi3.5 (3.5GB)  
+- phi3.5:latest (3.5GB)  
 - gemma2:2b (2GB)
 - qwen2.5:3b (3GB)
 ```
@@ -21,7 +21,7 @@ Total Memory: ~18GB for models + 6GB system
 
 Recommended Setup:
 - llama3.2:3b (3GB)
-- phi3.5 (3.5GB)
+- phi3.5:latest (3.5GB)
 - qwen2.5:7b (5GB)
 - mistral:7b-instruct-q4_K_M (4.5GB)
 - gemma2:2b (2GB)
@@ -36,7 +36,7 @@ Recommended Setup:
 - mixtral:8x7b-instruct-q3_K_M (15GB)
 - llama3.1:13b (8GB)
 - qwen2.5:7b (5GB)
-- phi3.5 (3.5GB)
+- phi3.5:latest (3.5GB)
 ```
 
 ## Model Specializations
@@ -52,7 +52,7 @@ Recommended Setup:
 - **gemma2:9b** - Google's model with creative capabilities
 
 ### Best for Analysis & Reasoning
-- **phi3.5** - Microsoft's model optimized for reasoning
+- **phi3.5:latest** - Microsoft's model optimized for reasoning
 - **qwen2.5:7b** - Strong analytical capabilities
 - **llama3.1:8b** - Good for complex reasoning
 

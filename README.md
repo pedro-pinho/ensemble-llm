@@ -1,4 +1,4 @@
-# Ensemble LLM 🤖
+# Ensemble LLM
 
 A powerful local LLM ensemble system that runs multiple language models in parallel and uses voting mechanisms to provide the best possible answers. Features include multi-model consensus, web search integration, and intelligent response selection.
 
@@ -6,7 +6,7 @@ A powerful local LLM ensemble system that runs multiple language models in paral
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux-lightgrey.svg)
 
-## Features ✨
+## Features
 
 - **Multi-Model Ensemble**: Run multiple LLMs simultaneously and get the best answer through intelligent voting
 - **Web Search Integration**: Automatically search the web for current information when needed
@@ -16,7 +16,7 @@ A powerful local LLM ensemble system that runs multiple language models in paral
 - **Extensive Logging**: Detailed logs for debugging and monitoring
 - **Interactive Mode**: CLI interface for continuous conversations
 
-## Requirements 📋
+## Requirements
 
 - macOS (Apple Silicon recommended) or Linux
 - Python 3.8+
@@ -24,7 +24,7 @@ A powerful local LLM ensemble system that runs multiple language models in paral
 - 20GB+ free disk space for models
 - Ollama installed
 
-## Quick Start 🚀
+## Quick Start
 
 ### 1. Clone the repository
 ```bash
@@ -60,7 +60,7 @@ python -m ensemble_llm.main -w "What's the latest news about AI?"
 python -m ensemble_llm.main -i -w
 ```
 
-## Installation (Manual) 🔧
+## Installation (Manual)
 
 ### Step 1: Install Ollama
 ```bash
@@ -78,7 +78,7 @@ ollama serve
 
 # Pull recommended models (in another terminal)
 ollama pull llama3.2:3b
-ollama pull phi3.5
+ollama pull phi3.5:latest
 ollama pull qwen2.5:7b
 ollama pull mistral:7b-instruct-q4_K_M
 ollama pull gemma2:2b
@@ -103,7 +103,7 @@ pip install -r requirements.txt
 python -m ensemble_llm.main "Hello, how are you?"
 ```
 
-## Usage 💡
+## Usage
 
 ### Basic Usage
 ```bash
@@ -123,7 +123,7 @@ python -m ensemble_llm.main -i
 ### Advanced Usage
 ```bash
 # Use specific models
-python -m ensemble_llm.main --models llama3.2:3b phi3.5 "Quick question"
+python -m ensemble_llm.main --models llama3.2:3b phi3.5:latest "Quick question"
 
 # Debug mode with detailed logging
 python -m ensemble_llm.main --log-level DEBUG -v "Test query"
@@ -140,7 +140,7 @@ import asyncio
 async def main():
     # Initialize ensemble with custom models
     ensemble = EnsembleLLM(
-        models=['llama3.2:3b', 'phi3.5', 'qwen2.5:7b'],
+        models=['llama3.2:3b', 'phi3.5:latest', 'qwen2.5:7b'],
         enable_web_search=True
     )
     
@@ -160,17 +160,17 @@ async def main():
 asyncio.run(main())
 ```
 
-## Model Recommendations 🎯
+## Model Recommendations
 
 Based on your available RAM:
 
 ### 16GB RAM
 - Run 3-4 small models (3B parameters)
-- Recommended: `llama3.2:3b`, `phi3.5`, `gemma2:2b`
+- Recommended: `llama3.2:3b`, `phi3.5:latest`, `gemma2:2b`
 
 ### 24GB RAM (Optimal)
 - Run 4-5 medium models (3-7B parameters)
-- Recommended: `llama3.2:3b`, `phi3.5`, `qwen2.5:7b`, `mistral:7b`, `gemma2:2b`
+- Recommended: `llama3.2:3b`, `phi3.5:latest`, `qwen2.5:7b`, `mistral:7b`, `gemma2:2b`
 
 ### 32GB+ RAM
 - Run 3-4 large models or 6+ small models
@@ -178,7 +178,7 @@ Based on your available RAM:
 
 See [docs/MODELS.md](docs/MODELS.md) for detailed model information.
 
-## How It Works 🔍
+## How It Works
 
 1. **Query Distribution**: Your question is sent to multiple LLMs in parallel
 2. **Response Generation**: Each model generates its answer independently
@@ -188,7 +188,7 @@ See [docs/MODELS.md](docs/MODELS.md) for detailed model information.
 6. **Quality Scoring**: Responses are evaluated for length, structure, and detail
 7. **Final Selection**: The response with the highest combined score is selected
 
-## Configuration ⚙️
+## Configuration
 
 Edit `ensemble_llm/config.py` to customize:
 
@@ -197,7 +197,7 @@ Edit `ensemble_llm/config.py` to customize:
 - Web search settings
 - Retry logic and timeouts
 
-## Troubleshooting 🔨
+## Troubleshooting
 
 ### Models not responding
 ```bash
@@ -219,7 +219,7 @@ ollama serve
 - Reduce model size or number
 - Increase timeout values in config
 
-## Contributing 🤝
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -229,18 +229,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License 📄
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments 🙏
+## Acknowledgments
 
 - [Ollama](https://ollama.ai/) for making local LLM deployment easy
 - The open-source AI community for providing amazing models
-- Contributors and testers
-
-## Star History ⭐
-
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/ensemble-llm&type=Date)](https://star-history.com/#yourusername/ensemble-llm&Date)
 
 ---

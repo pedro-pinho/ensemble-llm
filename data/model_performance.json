@@ -1,0 +1,120 @@
+{
+  "models": {
+    "llama3.2:3b": {
+      "total_queries": 2,
+      "successful_queries": 2,
+      "failed_queries": 0,
+      "times_selected": 0,
+      "total_response_time": 43.69806,
+      "scores": [],
+      "recent_performance": [
+        {
+          "timestamp": "2025-11-06T11:22:52.412384",
+          "success": true,
+          "response_time": 21.84903,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T11:22:52.426912",
+          "success": true,
+          "response_time": 21.84903,
+          "selected": false,
+          "consensus_score": 0.594595429614299,
+          "quality_score": 0.7636363636363636
+        }
+      ],
+      "consecutive_failures": 0,
+      "added_date": "2025-11-06T11:22:52.412361"
+    },
+    "phi3.5:latest": {
+      "total_queries": 2,
+      "successful_queries": 2,
+      "failed_queries": 0,
+      "times_selected": 1,
+      "total_response_time": 14.957818,
+      "scores": [],
+      "recent_performance": [
+        {
+          "timestamp": "2025-11-06T11:22:52.412409",
+          "success": true,
+          "response_time": 7.478909,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T11:22:52.426942",
+          "success": true,
+          "response_time": 7.478909,
+          "selected": true,
+          "consensus_score": 0.5275885709610565,
+          "quality_score": 1.0
+        }
+      ],
+      "consecutive_failures": 0,
+      "added_date": "2025-11-06T11:22:52.412399"
+    },
+    "qwen2.5:7b": {
+      "total_queries": 2,
+      "successful_queries": 2,
+      "failed_queries": 0,
+      "times_selected": 0,
+      "total_response_time": 40.825904,
+      "scores": [],
+      "recent_performance": [
+        {
+          "timestamp": "2025-11-06T11:22:52.412427",
+          "success": true,
+          "response_time": 20.412952,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T11:22:52.426950",
+          "success": true,
+          "response_time": 20.412952,
+          "selected": false,
+          "consensus_score": 0.5735601897242995,
+          "quality_score": 0.7636363636363636
+        }
+      ],
+      "consecutive_failures": 0,
+      "added_date": "2025-11-06T11:22:52.412419"
+    },
+    "mistral:7b-instruct-q4_K_M": {
+      "total_queries": 2,
+      "successful_queries": 2,
+      "failed_queries": 0,
+      "times_selected": 0,
+      "total_response_time": 66.715344,
+      "scores": [],
+      "recent_performance": [
+        {
+          "timestamp": "2025-11-06T11:22:52.412444",
+          "success": true,
+          "response_time": 33.357672,
+          "selected": false,
+          "consensus_score": 0,
+          "quality_score": 0
+        },
+        {
+          "timestamp": "2025-11-06T11:22:52.426957",
+          "success": true,
+          "response_time": 33.357672,
+          "selected": false,
+          "consensus_score": 0.5629149089847139,
+          "quality_score": 0.7636363636363636
+        }
+      ],
+      "consecutive_failures": 0,
+      "added_date": "2025-11-06T11:22:52.412436"
+    }
+  },
+  "global_stats": {
+    "total_queries": 8,
+    "start_date": "2025-11-06T11:21:59.856003"
+  }
+}

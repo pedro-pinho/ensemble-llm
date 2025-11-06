@@ -1,0 +1,375 @@
+"""Configuration file for Ensemble LLM"""
+
+# Default models with correct tags
+DEFAULT_MODELS = [
+    'llama3.2:3b',
+    'phi3.5:latest',
+    'qwen2.5:7b', 
+    'mistral:7b-instruct-q4_K_M',
+    'gemma2:2b'
+]
+
+# Model configurations with their specialties and resource requirements
+MODEL_CONFIGS = {
+    'llama3.2:3b': {
+        'memory_gb': 3,
+        'specialties': ['general', 'conversation', 'quick'],
+        'timeout': 30,
+        'description': 'Fast, efficient general-purpose model'
+    },
+    'llama3.2:1b': {
+        'memory_gb': 1,
+        'specialties': ['quick', 'basic'],
+        'timeout': 15,
+        'description': 'Ultra-fast for simple queries'
+    },
+    'phi3.5:latest': {
+        'memory_gb': 3.5,
+        'specialties': ['reasoning', 'analysis', 'educational'],
+        'timeout': 30,
+        'description': 'Microsoft model optimized for reasoning'
+    },
+    'phi3.5': {  # Alias for compatibility
+        'memory_gb': 3.5,
+        'specialties': ['reasoning', 'analysis', 'educational'],
+        'timeout': 30,
+        'description': 'Microsoft model optimized for reasoning'
+    },
+    'qwen2.5:7b': {
+        'memory_gb': 5,
+        'specialties': ['math', 'coding', 'technical'],
+        'timeout': 45,
+        'description': 'Excellent for code and technical content'
+    },
+    'qwen2.5:3b': {
+        'memory_gb': 3,
+        'specialties': ['math', 'coding', 'quick'],
+        'timeout': 25,
+        'description': 'Smaller version of Qwen, still good for code'
+    },
+    'mistral:7b-instruct-q4_K_M': {
+        'memory_gb': 4.5,
+        'specialties': ['creative', 'writing', 'general'],
+        'timeout': 40,
+        'description': 'Great for creative and general tasks'
+    },
+    'mistral:7b': {
+        'memory_gb': 4.5,
+        'specialties': ['creative', 'writing', 'general'],
+        'timeout': 40,
+        'description': 'Great for creative and general tasks'
+    },
+    'gemma2:2b': {
+        'memory_gb': 2,
+        'specialties': ['quick', 'summary', 'basic'],
+        'timeout': 20,
+        'description': 'Google model, fast and efficient'
+    },
+    'gemma2:9b': {
+        'memory_gb': 6,
+        'specialties': ['analysis', 'detailed', 'comprehensive'],
+        'timeout': 50,
+        'description': 'Larger Gemma for detailed analysis'
+    },
+    'tinyllama:1b': {
+        'memory_gb': 1,
+        'specialties': ['quick', 'basic'],
+        'timeout': 10,
+        'description': 'Tiny but fast model'
+    },
+    'orca-mini:3b': {
+        'memory_gb': 3,
+        'specialties': ['reasoning', 'explanation'],
+        'timeout': 25,
+        'description': 'Good for explanations'
+    },
+    'neural-chat:7b': {
+        'memory_gb': 5,
+        'specialties': ['conversation', 'chat'],
+        'timeout': 35,
+        'description': 'Intel optimized for conversation'
+    },
+    'openhermes:7b': {
+        'memory_gb': 5,
+        'specialties': ['instruction', 'general'],
+        'timeout': 35,
+        'description': 'Good instruction following'
+    },
+    'zephyr:7b': {
+        'memory_gb': 5,
+        'specialties': ['helpful', 'harmless', 'honest'],
+        'timeout': 35,
+        'description': 'Aligned for helpful responses'
+    },
+    'codellama:7b': {
+        'memory_gb': 5,
+        'specialties': ['code', 'programming', 'debugging'],
+        'timeout': 40,
+        'description': 'Meta model specialized for code'
+    },
+    'deepseek-coder:6.7b': {
+        'memory_gb': 4.5,
+        'specialties': ['code', 'programming', 'technical'],
+        'timeout': 35,
+        'description': 'Excellent code generation'
+    },
+    'wizard-math:7b': {
+        'memory_gb': 5,
+        'specialties': ['math', 'calculation', 'proof'],
+        'timeout': 35,
+        'description': 'Specialized for mathematics'
+    },
+    'mixtral:8x7b-instruct-q3_K_M': {
+        'memory_gb': 15,
+        'specialties': ['comprehensive', 'detailed', 'expert'],
+        'timeout': 60,
+        'description': 'Large MoE model for complex tasks'
+    },
+    'llama3.1:8b': {
+        'memory_gb': 8,
+        'specialties': ['general', 'comprehensive', 'balanced'],
+        'timeout': 45,
+        'description': 'Latest Llama, very capable'
+    },
+    'llama3.1:70b-instruct-q2_K': {
+        'memory_gb': 25,
+        'specialties': ['expert', 'comprehensive', 'detailed'],
+        'timeout': 90,
+        'description': 'Large model for complex reasoning'
+    }
+}
+
+# Web search configuration
+WEB_SEARCH_CONFIG = {
+    'max_results': 3,
+    'timeout': 10,
+    'fallback_enabled': True,
+    'uncertainty_threshold': 0.7,
+    'search_engines': ['duckduckgo'],  # Can add more later
+    'cache_ttl': 300,  # 5 minutes
+    'user_agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+}
+
+# Ensemble configuration
+ENSEMBLE_CONFIG = {
+    'consensus_weight': 0.6,
+    'quality_weight': 0.4,
+    'web_bonus': 1.15,
+    'max_retries': 2,
+    'retry_delay': 2,
+    'stagger_delays': {
+        '16GB': 0.5,
+        '24GB': 0.3,
+        '32GB': 0.2
+    },
+    'optimization_interval': 10,  # Optimize models every N queries
+    'performance_window': 50,     # Look at last N queries for performance
+    'model_rotation_threshold': 0.3  # Replace models scoring below this
+}
+
+# System configurations for different RAM sizes
+SYSTEM_CONFIGS = {
+    '16GB': {
+        'max_models': 3,
+        'max_total_memory_gb': 12,
+        'timeout_base': 40,
+        'stagger_delay': 0.5,
+        'recommended_models': [
+            'llama3.2:3b',
+            'phi3.5:latest',
+            'gemma2:2b'
+        ]
+    },
+    '24GB': {
+        'max_models': 4,
+        'max_total_memory_gb': 18,
+        'timeout_base': 35,
+        'stagger_delay': 0.3,
+        'recommended_models': [
+            'llama3.2:3b',
+            'phi3.5:latest',
+            'qwen2.5:7b',
+            'mistral:7b-instruct-q4_K_M'
+        ]
+    },
+    '32GB': {
+        'max_models': 5,
+        'max_total_memory_gb': 25,
+        'timeout_base': 30,
+        'stagger_delay': 0.2,
+        'recommended_models': [
+            'llama3.2:3b',
+            'qwen2.5:7b',
+            'mistral:7b-instruct-q4_K_M',
+            'mixtral:8x7b-instruct-q3_K_M',
+            'gemma2:2b'
+        ]
+    }
+}
+
+# Performance thresholds for model evaluation
+PERFORMANCE_THRESHOLDS = {
+    'min_success_rate': 0.7,      # Minimum 70% success rate
+    'min_selection_rate': 0.05,   # Selected at least 5% of the time
+    'max_avg_response_time': 30,  # Max 30 seconds average
+    'evaluation_window': 50,      # Last 50 queries
+    'retirement_threshold': 10,   # Retire after 10 consecutive failures
+    'probation_period': 5,        # New models get 5 queries before evaluation
+}
+
+# Model pools for rotation
+MODEL_POOLS = {
+    'primary': [
+        'llama3.2:3b',
+        'phi3.5:latest',
+        'qwen2.5:7b',
+        'mistral:7b-instruct-q4_K_M',
+        'gemma2:2b'
+    ],
+    'backup': [
+        'gemma2:9b',
+        'tinyllama:1b',
+        'orca-mini:3b',
+        'neural-chat:7b',
+        'openhermes:7b',
+        'zephyr:7b',
+        'llama3.2:1b',
+        'qwen2.5:3b'
+    ],
+    'specialized': {
+        'code': [
+            'codellama:7b',
+            'deepseek-coder:6.7b',
+            'qwen2.5:7b'
+        ],
+        'math': [
+            'wizard-math:7b',
+            'qwen2.5:7b'
+        ],
+        'creative': [
+            'mistral:7b-instruct-q4_K_M',
+            'zephyr:7b',
+            'gemma2:9b'
+        ],
+        'reasoning': [
+            'phi3.5:latest',
+            'orca-mini:3b',
+            'llama3.1:8b'
+        ],
+        'fast': [
+            'tinyllama:1b',
+            'llama3.2:1b',
+            'gemma2:2b'
+        ]
+    }
+}
+
+# Query type detection patterns
+QUERY_PATTERNS = {
+    'code': [
+        'code', 'program', 'function', 'debug', 'error', 'python',
+        'javascript', 'java', 'c++', 'sql', 'api', 'algorithm',
+        'script', 'compile', 'syntax', 'variable', 'class', 'method',
+        'implement', 'fix', 'bug'
+    ],
+    'math': [
+        'calculate', 'solve', 'equation', 'math', 'algebra',
+        'calculus', 'statistics', 'probability', 'integral',
+        'derivative', 'matrix', 'vector', 'theorem', 'proof',
+        'formula', 'number', 'compute'
+    ],
+    'creative': [
+        'write', 'story', 'poem', 'creative', 'essay',
+        'article', 'blog', 'narrative', 'describe', 'imagine',
+        'fiction', 'character', 'plot', 'scene', 'dialogue'
+    ],
+    'reasoning': [
+        'why', 'how', 'explain', 'reason', 'logic', 'analyze',
+        'compare', 'contrast', 'evaluate', 'assess', 'think',
+        'deduce', 'infer', 'conclude', 'argument'
+    ],
+    'factual': [
+        'what is', 'who is', 'when', 'where', 'define',
+        'fact', 'information', 'tell me about', 'describe'
+    ]
+}
+
+# Logging configuration
+LOGGING_CONFIG = {
+    'log_dir': 'logs',
+    'log_file': 'ensemble_llm.log',
+    'max_log_size': 10 * 1024 * 1024,  # 10 MB
+    'backup_count': 5,
+    'default_level': 'INFO'
+}
+
+# Performance tracking configuration
+TRACKING_CONFIG = {
+    'data_dir': 'data',
+    'performance_file': 'model_performance.json',
+    'adaptive_config_file': 'adaptive_config.json',
+    'save_interval': 10,  # Save every N queries
+    'cleanup_interval': 100,  # Clean old data every N queries
+    'max_history_days': 30  # Keep data for 30 days
+}
+
+# API endpoints (for Ollama)
+OLLAMA_ENDPOINTS = {
+    'default_host': 'http://localhost:11434',
+    'generate': '/api/generate',
+    'tags': '/api/tags',
+    'show': '/api/show',
+    'pull': '/api/pull',
+    'embeddings': '/api/embeddings',
+    'chat': '/api/chat'
+}
+
+# Response generation options
+GENERATION_OPTIONS = {
+    'temperature': 0.7,
+    'top_p': 0.9,
+    'top_k': 40,
+    'repeat_penalty': 1.1,
+    'num_predict': 512,  # Max tokens to generate
+    'num_ctx': 2048,     # Context window size
+    'stop': [],          # Stop sequences
+    'seed': 42           # For reproducibility in testing
+}
+
+# Feature flags
+FEATURES = {
+    'web_search': True,
+    'adaptive_models': True,
+    'performance_tracking': True,
+    'model_rotation': True,
+    'specialized_selection': True,
+    'caching': True,
+    'verbose_errors': True,
+    'auto_retry': True,
+    'staggered_starts': True
+}
+
+# Display configuration
+DISPLAY_CONFIG = {
+    'max_preview_length': 200,
+    'use_emojis': True,
+    'show_timestamps': True,
+    'colored_output': True,
+    'progress_indicators': True
+}
+
+# Error messages
+ERROR_MESSAGES = {
+    'no_models': "No models are currently available. Please check Ollama service.",
+    'all_failed': "All models failed to provide a valid response. Please try again.",
+    'timeout': "Request timed out after {timeout} seconds.",
+    'connection': "Failed to connect to Ollama service at {host}.",
+    'invalid_model': "Model '{model}' is not available or not installed."
+}
+
+# Success messages
+SUCCESS_MESSAGES = {
+    'initialized': "Ensemble LLM initialized successfully with {count} models.",
+    'model_loaded': "Model '{model}' loaded successfully.",
+    'optimization_complete': "Model optimization complete. Active models: {models}"
+}
