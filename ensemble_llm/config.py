@@ -373,3 +373,26 @@ SUCCESS_MESSAGES = {
     'model_loaded': "Model '{model}' loaded successfully.",
     'optimization_complete': "Model optimization complete. Active models: {models}"
 }
+
+SMART_LEARNING_CONFIG = {
+    'enabled': True,
+    'cache_similarity_threshold': 0.85,
+    'max_cache_size': 1000,
+    'precompute_common_queries': True,
+    'learning_rate': 0.1,
+    'confidence_threshold': 0.7,
+    'cache_ttl_hours': 24,
+    'model_history_size': 100,
+    'pattern_detection': True,
+    'auto_optimize_interval': 10  # Optimize every N queries
+}
+
+TRACKING_CONFIG = {
+    'data_dir': 'data',
+    'smart_data_dir': 'smart_data',  # New smart data directory
+    'performance_file': 'model_performance.json',
+    'adaptive_config_file': 'adaptive_config.json',
+    'save_interval': 10,
+    'cleanup_interval': 100,
+    'max_history_days': 30
+}

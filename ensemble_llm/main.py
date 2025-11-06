@@ -19,13 +19,18 @@ from .config import (
     DEFAULT_MODELS, MODEL_CONFIGS, WEB_SEARCH_CONFIG, ENSEMBLE_CONFIG,
     SYSTEM_CONFIGS, PERFORMANCE_THRESHOLDS, MODEL_POOLS, QUERY_PATTERNS,
     LOGGING_CONFIG, TRACKING_CONFIG, OLLAMA_ENDPOINTS, GENERATION_OPTIONS,
-    FEATURES, DISPLAY_CONFIG, ERROR_MESSAGES, SUCCESS_MESSAGES
+    FEATURES, DISPLAY_CONFIG, ERROR_MESSAGES, SUCCESS_MESSAGES, SMART_LEARNING_CONFIG
 )
 from .performance_tracker import ModelPerformanceTracker, AdaptiveModelManager
+from .learning_system import (
+    SmartEnsembleOrchestrator, QueryCache, ModelOptimizer, 
+    QueryPatternLearner, PrecomputeManager
+)
 
 class EnsembleLLM:
     def __init__(self, models: List[str] = None, ollama_host: str = None, 
-                 enable_web_search: bool = None, adaptive_mode: bool = None):
+                 enable_web_search: bool = None, adaptive_mode: bool = None,
+                 smart_learning: bool = True):
         
         # Use config values with overrides
         self.host = ollama_host or OLLAMA_ENDPOINTS['default_host']
@@ -67,6 +72,24 @@ class EnsembleLLM:
         self.logger.info(SUCCESS_MESSAGES['initialized'].format(count=len(self.models)))
         self.logger.info(f"Web search: {'Enabled' if self.enable_web_search else 'Disabled'}")
         self.logger.info(f"Adaptive optimization: {'Enabled' if self.adaptive_mode else 'Disabled'}")
+
+        self.smart_learning = smart_learning
+        if smart_learning:
+            self.orchestrator = SmartEnsembleOrchestrator(
+                data_dir=TRACKING_CONFIG.get('smart_data_dir', 'smart_data')
+            )
+            self.precompute_manager = PrecomputeManager(
+                precompute_dir=str(Path(TRACKING_CONFIG.get('smart_data_dir', 'smart_data')) / 'precompute')
+            )
+            self.logger.info("Smart learning system enabled - queries will be optimized over time")
+            
+            # Load performance insights
+            insights = self.orchestrator.get_performance_insights()
+            self.logger.info(f"Loaded smart data: {insights['total_queries']} previous queries, "
+                           f"{insights['cache_hit_rate']:.1f}% cache hit rate")
+        else:
+            self.orchestrator = None
+            self.precompute_manager = None
     
     async def initialize(self):
         """Async initialization - preload models and resolve names"""
@@ -83,6 +106,27 @@ class EnsembleLLM:
                 self.logger.info(SUCCESS_MESSAGES['optimization_complete'].format(
                     models=', '.join(self.models)
                 ))
+        if self.smart_learning and self.orchestrator:
+            # Get optimized model order based on learning
+            self.models = self.orchestrator.get_optimized_models(
+                self.models, 
+                query_type=None  # General optimization
+            )
+            
+            # Precompute common queries if needed
+            common_queries = [
+                "Hello",
+                "What can you help me with?",
+                "Explain quantum computing",
+                "Write a Python function",
+                "What is machine learning?"
+            ]
+            
+            if self.precompute_manager:
+                await self.precompute_manager.precompute_common_queries(
+                    self.models[:3],  # Only precompute for top 3 models
+                    common_queries
+                )
     
     async def resolve_model_names(self, models: List[str]) -> List[str]:
         """Resolve model names to their actual tags in Ollama"""
@@ -262,6 +306,25 @@ class EnsembleLLM:
     async def query_model_optimized(self, session, model: str, prompt: str, 
                                    stagger_delay: float = 0) -> Dict:
         """Query a model with optimizations using config settings"""
+
+        # Get optimal parameters from learning system
+        if self.smart_learning and self.orchestrator:
+            optimal_params = self.orchestrator.get_optimal_params_for_model(model)
+            
+            # Check for precomputed response
+            if self.precompute_manager:
+                precomputed = self.precompute_manager.get_precomputed_response(prompt, model)
+                if precomputed:
+                    self.logger.info(f"Using precomputed response for {model}")
+                    return {
+                        "model": model,
+                        "response": precomputed,
+                        "success": True,
+                        "response_time": 0.01,  # Near instant
+                        "precomputed": True
+                    }
+        else:
+            optimal_params = GENERATION_OPTIONS.copy()
         
         # Add stagger delay to prevent resource competition
         if FEATURES['staggered_starts'] and stagger_delay > 0:
@@ -297,7 +360,7 @@ class EnsembleLLM:
             "model": model,
             "prompt": enhanced_prompt,
             "stream": False,
-            "options": GENERATION_OPTIONS.copy()
+            "options": optimal_params
         }
         
         # Retry logic
@@ -643,6 +706,24 @@ class EnsembleLLM:
         
         start_time = datetime.now()
         
+        # Check cache first if smart learning is enabled
+        if self.smart_learning and self.orchestrator:
+            cached_result = await self.orchestrator.check_cache(prompt)
+            
+            if cached_result:
+                response, metadata = cached_result
+                
+                # Add cache info to metadata
+                metadata['from_cache'] = True
+                metadata['total_ensemble_time'] = 0.01  # Near instant
+                
+                if verbose:
+                    cache_similarity = metadata.get('cache_similarity', 1.0)
+                    print(f"\n{'🎯' if DISPLAY_CONFIG['use_emojis'] else ''} "
+                          f"Using cached result (similarity: {cache_similarity:.2f})")
+                
+                return response, metadata
+        
         # Detect query type if specialized selection is enabled
         query_type = None
         if FEATURES['specialized_selection']:
@@ -710,9 +791,71 @@ class EnsembleLLM:
             print("\n" + "="*60)
             print(self.performance_tracker.get_performance_summary())
             print("="*60 + "\n")
+
+        # After getting the best response, update learning
+        if self.smart_learning and self.orchestrator:
+            # Prepare model performance data
+            model_performances = []
+            for response in responses:
+                if response['success']:
+                    model_scores = metadata.get('all_scores', {}).get(response['model'], {})
+                    model_performances.append({
+                        'model': response['model'],
+                        'success': response['success'],
+                        'response_time': response.get('response_time', 0),
+                        'params': optimal_params if 'optimal_params' in locals() else {},
+                        'quality_score': model_scores.get('final', 0.5)
+                    })
+            
+            # Update all learning components
+            self.orchestrator.update_learning(
+                query=prompt,
+                response=best_response,
+                metadata=metadata,
+                model_performances=model_performances
+            )
         
         return best_response, metadata
     
+    async def show_smart_insights(self):
+        """Display smart learning insights"""
+        
+        if not self.smart_learning or not self.orchestrator:
+            print("Smart learning is not enabled")
+            return
+        
+        insights = self.orchestrator.get_performance_insights()
+        
+        use_emojis = DISPLAY_CONFIG['use_emojis']
+        
+        print(f"\n{'='*60}")
+        print(f"{'🧠' if use_emojis else ''} Smart Learning Insights")
+        print(f"{'='*60}")
+        print(f"Total Queries Processed: {insights['total_queries']}")
+        print(f"Cache Hit Rate: {insights['cache_hit_rate']:.1f}%")
+        print(f"Average Response Time: {insights['avg_response_time']:.2f}s")
+        
+        print(f"\n{'📊' if use_emojis else ''} Model Confidence Scores:")
+        sorted_confidences = sorted(insights['model_confidences'].items(), 
+                                  key=lambda x: x[1], reverse=True)
+        for model, confidence in sorted_confidences[:5]:
+            bar = '█' * int(confidence * 20)
+            print(f"  {model:30} {bar} {confidence:.2f}")
+        
+        if insights['top_models_by_type']:
+            print(f"\n{'🎯' if use_emojis else ''} Best Models by Query Type:")
+            for query_type, models in insights['top_models_by_type'].items():
+                print(f"  {query_type:15} -> {', '.join(models[:3])}")
+        
+        # Show cache statistics
+        cache_dir = Path(TRACKING_CONFIG.get('smart_data_dir', 'smart_data')) / 'cache'
+        if cache_dir.exists():
+            cache_size = sum(f.stat().st_size for f in cache_dir.glob('*.pkl'))
+            cache_count = len(list(cache_dir.glob('*.pkl')))
+            print(f"\n{'💾' if use_emojis else ''} Cache Statistics:")
+            print(f"  Cached Queries: {cache_count}")
+            print(f"  Cache Size: {cache_size / (1024*1024):.2f} MB")
+
     def display_verbose_output(self, responses: List[Dict], metadata: Dict, total_time: float):
         """Display detailed output in verbose mode using config settings"""
         
@@ -867,6 +1010,12 @@ async def main():
                        help='Disable emoji output')
     parser.add_argument('--host', default=None,
                        help=f'Ollama host (default: {OLLAMA_ENDPOINTS["default_host"]})')
+    parser.add_argument('--no-smart', action='store_true',
+                   help='Disable smart learning system')
+    parser.add_argument('--clear-cache', action='store_true',
+                    help='Clear smart cache and start fresh')
+    parser.add_argument('--insights', action='store_true',
+                    help='Show smart learning insights')
     
     args = parser.parse_args()
     
@@ -887,6 +1036,22 @@ async def main():
         print("\n" + tracker.get_performance_summary())
         print(f"\nPerformance data location: {TRACKING_CONFIG['data_dir']}/{TRACKING_CONFIG['performance_file']}")
         return
+
+    if args.clear_cache:
+        import shutil
+        smart_dir = Path(TRACKING_CONFIG.get('smart_data_dir', 'smart_data'))
+        if smart_dir.exists():
+            shutil.rmtree(smart_dir)
+            print("✅ Smart cache cleared")
+        return
+
+    if args.insights:
+        ensemble = EnsembleLLM(
+            models=args.models,
+            smart_learning=True
+        )
+        await ensemble.show_smart_insights()
+        return
     
     # Display startup banner
     use_emojis = DISPLAY_CONFIG['use_emojis']
@@ -904,8 +1069,9 @@ async def main():
     ensemble = EnsembleLLM(
         models=args.models,
         ollama_host=args.host,
-        enable_web_search=args.web_search or None,  # Use None to fall back to config
-        adaptive_mode=not args.no_adaptive if not args.no_adaptive else None
+        enable_web_search=args.web_search or None,
+        adaptive_mode=not args.no_adaptive if not args.no_adaptive else None,
+        smart_learning=not args.no_smart and SMART_LEARNING_CONFIG['enabled']
     )
     
     # Initialize (preload models)
