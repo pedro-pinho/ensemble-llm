@@ -34,6 +34,7 @@ from .config import (
     SPEED_PROFILES,
     SPEED_OPTIMIZED_MODELS,
     FAST_MODEL_CONFIGS,
+    COUNCIL_CONFIG,
 )
 from .performance_tracker import ModelPerformanceTracker, AdaptiveModelManager
 from .learning_system import (
@@ -380,12 +381,88 @@ class EnsembleLLM:
 
         return None
 
+    def create_council_aware_prompt(self, model: str, user_prompt: str) -> str:
+        """Create a council-aware prompt that tells the model it's part of an ensemble"""
+
+        if not COUNCIL_CONFIG["enabled"]:
+            return user_prompt
+
+        # Get model specialty from config
+        model_config = MODEL_CONFIGS.get(model, {})
+        specialties = model_config.get("specialties", ["general"])
+        model_specialty = ", ".join(specialties)
+
+        # Get all council members
+        council_members = ", ".join(self.models)
+
+        # Format the system prompt
+        system_context = COUNCIL_CONFIG["system_prompt_template"].format(
+            model_name=model,
+            total_models=len(self.models),
+            model_specialty=model_specialty,
+            council_members=council_members
+        )
+
+        # Combine system context with user prompt
+        full_prompt = f"{system_context}\n\n{user_prompt}\n\nYour response:"
+
+        return full_prompt
+
+    def filter_ai_meta_talk(self, text: str) -> str:
+        """
+        Remove AI meta-talk and self-references from the response
+
+        This ensures the final answer doesn't contain phrases like "as an AI",
+        "I don't have access to", etc.
+        """
+
+        if not COUNCIL_CONFIG.get("filter_ai_meta_talk", False):
+            return text
+
+        import re
+
+        filtered_text = text
+        patterns = COUNCIL_CONFIG.get("meta_talk_patterns", [])
+
+        # Track what we removed for logging
+        removed_phrases = []
+
+        for pattern in patterns:
+            # Find matches before removing
+            matches = re.finditer(pattern, filtered_text, re.IGNORECASE)
+            for match in matches:
+                removed_phrases.append(match.group(0))
+
+            # Remove the pattern
+            # We remove the entire sentence containing the pattern
+            filtered_text = re.sub(
+                r'[^.!?]*' + pattern + r'[^.!?]*[.!?]',
+                '',
+                filtered_text,
+                flags=re.IGNORECASE
+            )
+
+        # Clean up extra whitespace and newlines
+        filtered_text = re.sub(r'\n\s*\n\s*\n', '\n\n', filtered_text)
+        filtered_text = re.sub(r'  +', ' ', filtered_text)
+        filtered_text = filtered_text.strip()
+
+        if removed_phrases and FEATURES.get("verbose_errors", False):
+            self.logger.debug(
+                f"Filtered AI meta-talk: {', '.join(set(removed_phrases))}"
+            )
+
+        return filtered_text
+
     async def query_model_fast(self, model: str, prompt: str) -> Dict:
         """Fast query implementation"""
 
+        # Create council-aware prompt if enabled
+        council_prompt = self.create_council_aware_prompt(model, prompt)
+
         if self.speed_mode == "turbo":
             # Use turbo mode for ultra-fast responses
-            return await self.turbo_mode.turbo_query(model, prompt)
+            return await self.turbo_mode.turbo_query(model, council_prompt)
 
         # Use speed-optimized parameters
         start_time = datetime.now()
@@ -393,7 +470,7 @@ class EnsembleLLM:
         async with aiohttp.ClientSession() as session:
             payload = {
                 "model": model,
-                "prompt": prompt,
+                "prompt": council_prompt,
                 "stream": False,
                 "options": {
                     "temperature": self.speed_profile["temperature"],
@@ -629,10 +706,13 @@ class EnsembleLLM:
             enhanced_prompt = self._current_web_context
             used_web_search = True
 
+        # Apply council-aware prompt wrapper (after web search enhancement)
+        final_prompt = self.create_council_aware_prompt(model, enhanced_prompt)
+
         # Use generation options from config
         payload = {
             "model": model,
-            "prompt": enhanced_prompt,
+            "prompt": final_prompt,
             "stream": False,
             "options": optimal_params,
         }
@@ -1031,6 +1111,130 @@ class EnsembleLLM:
 
         return best_response["response"], metadata
 
+    async def synthesize_final_answer(
+        self,
+        winning_model: str,
+        original_question: str,
+        all_responses: List[Dict],
+        verbose: bool = False,
+    ) -> str:
+        """
+        Have the winning model synthesize all council responses into one final answer
+
+        Args:
+            winning_model: The model selected by voting
+            original_question: The user's original question
+            all_responses: All model responses from the council
+            verbose: Whether to show synthesis process
+
+        Returns:
+            Synthesized final answer
+        """
+
+        if not COUNCIL_CONFIG.get("synthesis_mode", False):
+            # Synthesis disabled, return winning model's original response (filtered)
+            for resp in all_responses:
+                if resp["model"] == winning_model and resp["success"]:
+                    return self.filter_ai_meta_talk(resp["response"])
+            return ""
+
+        if verbose:
+            self.logger.info(
+                f"Synthesizing final answer using {winning_model} as spokesperson..."
+            )
+
+        # Format all responses for the winning model to read
+        response_summary = []
+        for resp in all_responses:
+            if not resp["success"]:
+                continue
+
+            model = resp["model"]
+            text = resp["response"]
+
+            # Format each response
+            response_summary.append(f"**{model}**:\n{text}")
+
+        all_responses_text = "\n\n---\n\n".join(response_summary)
+
+        # Create synthesis prompt
+        synthesis_prompt = COUNCIL_CONFIG["synthesis_prompt_template"].format(
+            question=original_question, all_responses=all_responses_text
+        )
+
+        if verbose:
+            print(f"\n{'='*70}")
+            print("SYNTHESIS PHASE")
+            print(f"{'='*70}")
+            print(f"Spokesperson: {winning_model}")
+            print(f"Synthesizing {len(response_summary)} council responses...")
+            print(f"{'='*70}\n")
+
+        # Query the winning model to synthesize
+        # Use a direct query without council-aware wrapper to avoid recursion
+        start_time = datetime.now()
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    "model": winning_model,
+                    "prompt": synthesis_prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.7,
+                        "num_predict": 1024,  # Allow longer synthesis
+                        "num_ctx": 4096,  # Need larger context for all responses
+                    },
+                }
+
+                # Get timeout from model config
+                model_config = MODEL_CONFIGS.get(winning_model, {})
+                timeout = model_config.get("timeout", 45)
+
+                async with session.post(
+                    f"{self.host}/api/generate",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        synthesized_answer = result.get("response", "")
+
+                        if verbose:
+                            synthesis_time = (
+                                datetime.now() - start_time
+                            ).total_seconds()
+                            print(
+                                f"Synthesis completed in {synthesis_time:.2f}s"
+                            )
+
+                        # Filter out AI meta-talk from synthesized response
+                        filtered_answer = self.filter_ai_meta_talk(synthesized_answer)
+
+                        if verbose and filtered_answer != synthesized_answer:
+                            print("Applied AI meta-talk filter to clean response\n")
+                        elif verbose:
+                            print()
+
+                        return filtered_answer
+                    else:
+                        self.logger.warning(
+                            f"Synthesis failed with HTTP {response.status}, using original response"
+                        )
+                        # Fallback to original winning response (also filter it)
+                        for resp in all_responses:
+                            if resp["model"] == winning_model and resp["success"]:
+                                return self.filter_ai_meta_talk(resp["response"])
+
+        except Exception as e:
+            self.logger.error(f"Synthesis error: {str(e)}, using original response")
+            # Fallback to original winning response (also filter it)
+            for resp in all_responses:
+                if resp["model"] == winning_model and resp["success"]:
+                    return self.filter_ai_meta_talk(resp["response"])
+
+        return ""
+
     async def ensemble_query(
         self, prompt: str, verbose: bool = False
     ) -> Tuple[str, Dict]:
@@ -1121,16 +1325,43 @@ class EnsembleLLM:
                         ).total_seconds(),
                         "speed_mode": self.speed_mode,
                         "strategy": self.speed_profile["strategy"],
+                        "synthesized": False,  # Turbo mode skips synthesis
                     }
 
                     self.logger.info(
                         f"Turbo mode completed in {metadata['total_ensemble_time']:.2f}s"
                     )
 
+                    # Note: Synthesis is skipped in turbo mode for speed
                     return response["response"], metadata
 
         # Voting and selection
         best_response, metadata = self.weighted_voting(responses)
+
+        # Synthesis step: Have winning model combine all responses into final answer
+        if COUNCIL_CONFIG.get("enabled") and COUNCIL_CONFIG.get("synthesis_mode"):
+            winning_model = metadata.get("selected_model")
+
+            if winning_model and not metadata.get("all_failed", False):
+                synthesized_answer = await self.synthesize_final_answer(
+                    winning_model=winning_model,
+                    original_question=prompt,  # Use original prompt, not enhanced
+                    all_responses=responses,
+                    verbose=verbose,
+                )
+
+                if synthesized_answer:
+                    # Replace the response with synthesized version
+                    best_response = synthesized_answer
+                    metadata["synthesized"] = True
+                    metadata["synthesis_model"] = winning_model
+                else:
+                    metadata["synthesized"] = False
+                    self.logger.warning("Synthesis returned empty, using original response")
+            else:
+                metadata["synthesized"] = False
+        else:
+            metadata["synthesized"] = False
 
         # Update performance tracker with final selection
         if (

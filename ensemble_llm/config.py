@@ -465,6 +465,81 @@ SMART_LEARNING_CONFIG = {
     "auto_optimize_interval": 10,  # Optimize every N queries
 }
 
+# Council/Ensemble Awareness Configuration
+COUNCIL_CONFIG = {
+    "enabled": False,  # Enable council-aware prompts
+    "mode": "simple",  # Options: "simple", "iterative", "debate"
+    "synthesis_mode": True,  # After voting, winning model synthesizes all responses
+    "filter_ai_meta_talk": True,  # Remove AI self-references from final output
+
+    "system_prompt_template": """INTERNAL SYSTEM MESSAGE (not visible to user):
+
+You are {model_name}, an AI model. You are part of an AI council consisting of {total_models} models: {council_members}
+
+Your specialty: {model_specialty}
+
+IMPORTANT DISTINCTIONS:
+- YOU are an AI model, part of the council (internal discussion)
+- The USER is a human asking a question (external, does not see this council process)
+- This message is ONLY for you and other AI models - the user does NOT see this
+
+Your task: Provide your best technical analysis for the internal council discussion. Focus on the substance of the answer. Other AI models in the council will also contribute their perspectives.
+
+Now, here is the USER'S QUESTION:""",
+
+    "synthesis_prompt_template": """INTERNAL SYSTEM MESSAGE - SYNTHESIS TASK:
+
+You were selected by the council voting system to create the final response for the USER.
+
+The user asked: {question}
+
+Here are the INTERNAL responses from other AI models in the council:
+
+{all_responses}
+
+CRITICAL INSTRUCTIONS FOR SYNTHESIS:
+1. The user is a HUMAN - they do NOT know about this AI council
+2. Synthesize the best insights into ONE direct answer
+3. Write as if answering directly - NO phrases like:
+   ❌ "As an AI"
+   ❌ "I don't have access to"
+   ❌ "As a language model"
+   ❌ "The council discussed"
+   ❌ "Based on my training"
+   ❌ "I cannot"
+   ❌ Any mention of being AI or the council process
+
+4. Instead, write DIRECT, AUTHORITATIVE answers:
+   ✓ State facts and information directly
+   ✓ If something is unknown, say "This information is not available" (not "I don't have")
+   ✓ Provide value and insights, not disclaimers
+   ✓ Write like a knowledgeable expert explaining to a human
+
+5. Combine the SUBSTANCE from all responses - ignore any AI meta-talk from council members
+
+FINAL ANSWER FOR THE USER (direct, no AI self-references):""",
+
+    "include_model_specialties": True,  # Include each model's specialty in prompt
+    "iterative_rounds": 2,  # For iterative mode: number of discussion rounds
+
+    # Common AI meta-talk patterns to filter out
+    "meta_talk_patterns": [
+        r"as an ai( language model| assistant)?",
+        r"i('m| am) an ai",
+        r"as a language model",
+        r"i don'?t have (access to|the ability)",
+        r"i cannot (access|browse|see)",
+        r"my training (data|cutoff)",
+        r"based on my training",
+        r"i('m| am) not able to",
+        r"the council (discussed|decided|voted)",
+        r"as (part of |a member of )?the council",
+        r"my fellow (models|council members)",
+        r"from my perspective as an ai",
+        r"speaking as [a-z0-9:.]+ model",
+    ],
+}
+
 TRACKING_CONFIG = {
     "data_dir": "data",
     "smart_data_dir": "smart_data",  # New smart data directory
