@@ -63,7 +63,7 @@ Question: {prompt}
 Your initial response:"""
 
         # Get responses from all models
-        responses_r1 = await self.query_all_models_optimized(prompt)
+        responses_r1 = await self.query_all_models(prompt)
 
         if verbose:
             for resp in responses_r1:
@@ -110,9 +110,7 @@ Your refined response:"""
 
                 # Query this model
                 async with self.session_manager.get_session() as session:
-                    result = await self.query_model_optimized(
-                        session, model, final_prompt
-                    )
+                    result = await self.query_model(session, model, final_prompt)
                     if result["success"]:
                         responses_rn.append(result)
                         if model in all_responses:
@@ -175,6 +173,7 @@ async def demo_iterative_council():
 
     # Enable council mode
     from ensemble_llm import config
+
     config.COUNCIL_CONFIG["enabled"] = True
 
     # Initialize
@@ -216,6 +215,7 @@ async def compare_single_vs_iterative():
     """Compare single-round vs multi-round council"""
 
     from ensemble_llm import config
+
     config.COUNCIL_CONFIG["enabled"] = True
 
     question = "What are the most important skills for the future workplace?"

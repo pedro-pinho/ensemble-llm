@@ -501,19 +501,19 @@ CRITICAL INSTRUCTIONS FOR SYNTHESIS:
 1. The user is a HUMAN - they do NOT know about this AI council
 2. Synthesize the best insights into ONE direct answer
 3. Write as if answering directly - NO phrases like:
-   ❌ "As an AI"
-   ❌ "I don't have access to"
-   ❌ "As a language model"
-   ❌ "The council discussed"
-   ❌ "Based on my training"
-   ❌ "I cannot"
-   ❌ Any mention of being AI or the council process
+   "As an AI"
+   "I don't have access to"
+   "As a language model"
+   "The council discussed"
+   "Based on my training"
+   "I cannot"
+   Any mention of being AI or the council process
 
 4. Instead, write DIRECT, AUTHORITATIVE answers:
-   ✓ State facts and information directly
-   ✓ If something is unknown, say "This information is not available" (not "I don't have")
-   ✓ Provide value and insights, not disclaimers
-   ✓ Write like a knowledgeable expert explaining to a human
+   State facts and information directly
+   If something is unknown, say "This information is not available" (not "I don't have")
+   Provide value and insights, not disclaimers
+   Write like a knowledgeable expert explaining to a human
 
 5. Combine the SUBSTANCE from all responses - ignore any AI meta-talk from council members
 

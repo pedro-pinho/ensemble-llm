@@ -220,7 +220,7 @@ class EnsembleLLM:
                 )
         if self.smart_learning and self.orchestrator:
             # Get optimized model order based on learning
-            self.models = self.orchestrator.get_optimized_models(
+            self.models = self.orchestrator.get_models(
                 self.models, query_type=None  # General optimization
             )
 
@@ -408,7 +408,7 @@ class EnsembleLLM:
 
         return full_prompt
 
-    def filter_ai_meta_talk(self, text: str) -> str:
+    def clean_response(self, text: str) -> str:
         """
         Remove AI meta-talk and self-references from the response
 
@@ -644,7 +644,7 @@ class EnsembleLLM:
 
         return prompt, False
 
-    async def query_model_optimized(
+    async def query_model(
         self, session, model: str, prompt: str, stagger_delay: float = 0
     ) -> Dict:
         """Query a model with optimizations using config settings"""
@@ -681,7 +681,7 @@ class EnsembleLLM:
 
         # Get optimized timeout for this model
         if self.model_manager:
-            timeout = self.model_manager.get_optimized_timeout(model)
+            timeout = self.model_manager.get_timeout(model)
         else:
             # Use timeout from model config
             model_config = MODEL_CONFIGS.get(model, {})
@@ -868,7 +868,7 @@ class EnsembleLLM:
             "response_time": (datetime.now() - start_time).total_seconds(),
         }
 
-    async def query_all_models_optimized(self, prompt: str) -> List[Dict]:
+    async def query_all_models(self, prompt: str) -> List[Dict]:
         """Query all models with optimization using config settings"""
 
         # Check model availability
@@ -905,7 +905,7 @@ class EnsembleLLM:
                 stagger_delay = ENSEMBLE_CONFIG["stagger_delays"].get("24GB", 0.3)
 
             for i, model in enumerate(available_models):
-                task = self.query_model_optimized(
+                task = self.query_model(
                     session,
                     model,
                     prompt,
@@ -1135,7 +1135,7 @@ class EnsembleLLM:
             # Synthesis disabled, return winning model's original response (filtered)
             for resp in all_responses:
                 if resp["model"] == winning_model and resp["success"]:
-                    return self.filter_ai_meta_talk(resp["response"])
+                    return self.clean_response(resp["response"])
             return ""
 
         if verbose:
@@ -1209,14 +1209,14 @@ class EnsembleLLM:
                             )
 
                         # Filter out AI meta-talk from synthesized response
-                        filtered_answer = self.filter_ai_meta_talk(synthesized_answer)
+                        cleaned_answer = self.clean_response(synthesized_answer)
 
-                        if verbose and filtered_answer != synthesized_answer:
+                        if verbose and cleaned_answer != synthesized_answer:
                             print("Applied AI meta-talk filter to clean response\n")
                         elif verbose:
                             print()
 
-                        return filtered_answer
+                        return cleaned_answer
                     else:
                         self.logger.warning(
                             f"Synthesis failed with HTTP {response.status}, using original response"
@@ -1224,14 +1224,14 @@ class EnsembleLLM:
                         # Fallback to original winning response (also filter it)
                         for resp in all_responses:
                             if resp["model"] == winning_model and resp["success"]:
-                                return self.filter_ai_meta_talk(resp["response"])
+                                return self.clean_response(resp["response"])
 
         except Exception as e:
             self.logger.error(f"Synthesis error: {str(e)}, using original response")
             # Fallback to original winning response (also filter it)
             for resp in all_responses:
                 if resp["model"] == winning_model and resp["success"]:
-                    return self.filter_ai_meta_talk(resp["response"])
+                    return self.clean_response(resp["response"])
 
         return ""
 
@@ -1311,7 +1311,7 @@ class EnsembleLLM:
         if self.speed_mode in ["turbo", "fast"]:
             responses = await self.query_all_models_fast(enhanced_prompt)
         else:
-            responses = await self.query_all_models_optimized(enhanced_prompt)
+            responses = await self.query_all_models(enhanced_prompt)
 
         # For turbo mode, skip complex voting if we only have 1-2 responses
         if self.speed_mode == "turbo" and len(responses) <= 2:
@@ -1765,7 +1765,7 @@ async def main():
         smart_dir = Path(TRACKING_CONFIG.get("smart_data_dir", "smart_data"))
         if smart_dir.exists():
             shutil.rmtree(smart_dir)
-            print("✅ Smart cache cleared")
+            print("Smart cache cleared")
 
     if args.clear_failed_cache:
         from .learning_system import CacheManager
@@ -1795,10 +1795,10 @@ async def main():
         return
 
     if args.optimize_windows and PlatformUtils.get_platform() == "windows":
-        print("🪟 Optimizing for Windows GPU...")
+        print("Optimizing for Windows GPU...")
         env_vars = WindowsOptimizer.optimize_ollama_for_gpu()
         WindowsOptimizer.set_process_priority("ollama", "HIGH")
-        print(f"✅ Set GPU environment variables and process priority")
+        print(f"Set GPU environment variables and process priority")
 
     # Display startup banner
     print(f"\n{'='*60}")

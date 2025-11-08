@@ -585,7 +585,7 @@ class SmartEnsembleOrchestrator:
             self.model_optimizer.save_optimizations()
             self.pattern_learner.save_patterns()
 
-    def get_optimized_models(
+    def get_models(
         self, available_models: List[str], query_type: Optional[str]
     ) -> List[str]:
         """Get optimized model list based on learning"""
@@ -739,7 +739,7 @@ class CacheManager:
         if cache_path.exists():
             shutil.rmtree(cache_path)
             cache_path.mkdir(exist_ok=True)
-            print(f"✅ Cleared all cache in {cache_dir}")
+            print(f"Cleared all cache in {cache_dir}")
 
     @staticmethod
     def clear_failed_cache(cache_dir: str = "smart_data/cache"):
@@ -769,13 +769,13 @@ class CacheManager:
                     cache_file.unlink()
                     removed_count += 1
                     print(
-                        f"❌ Removed failed cache: {data.get('query', 'unknown')[:50]}..."
+                        f"Removed failed cache: {data.get('query', 'unknown')[:50]}..."
                     )
 
             except Exception as e:
                 print(f"Error checking {cache_file}: {e}")
 
-        print(f"✅ Removed {removed_count} failed cache entries")
+        print(f"Removed {removed_count} failed cache entries")
 
     @staticmethod
     def show_cache_stats(cache_dir: str = "smart_data/cache"):
@@ -806,7 +806,7 @@ class CacheManager:
             except:
                 pass
 
-        print(f"📊 Cache Statistics:")
+        print(f"Cache Statistics:")
         print(f"   Total entries: {total}")
         print(f"   Failed entries: {failed}")
         print(f"   Valid entries: {total - failed}")

@@ -76,7 +76,7 @@ async def demo_with_synthesis():
     all_scores = metadata.get("all_scores", {})
     for model, scores in all_scores.items():
         is_winner = model == metadata.get("selected_model")
-        marker = "👑 WINNER" if is_winner else ""
+        marker = "WINNER" if is_winner else ""
         print(f"\n{model} {marker}")
         print(f"  Consensus: {scores.get('consensus', 0):.3f}")
         print(f"  Quality:   {scores.get('quality', 0):.3f}")
@@ -259,9 +259,9 @@ if __name__ == "__main__":
     print('3. Set "enabled": True')
     print('4. Set "synthesis_mode": True')
     print("\nBenefits:")
-    print("✓ Models contribute unique perspectives")
-    print("✓ Best model acts as spokesperson")
-    print("✓ Final answer combines all insights")
-    print("✓ Clean output without meta-discussion")
-    print("✓ More comprehensive and balanced responses")
+    print("Models contribute unique perspectives")
+    print("Best model acts as spokesperson")
+    print("Final answer combines all insights")
+    print("Clean output without meta-discussion")
+    print("More comprehensive and balanced responses")
     print("=" * 70 + "\n")

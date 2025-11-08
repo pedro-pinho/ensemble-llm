@@ -38,9 +38,9 @@ def fix_database():
         """
         )
         conn.commit()
-        print("✓ Conversations table created")
+        print("Conversations table created")
     else:
-        print("✓ Conversations table already exists")
+        print("Conversations table already exists")
 
     conn.close()
     print("Database fixed!")

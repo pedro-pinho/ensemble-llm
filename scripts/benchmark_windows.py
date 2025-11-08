@@ -95,11 +95,11 @@ async def benchmark_gpu():
             )
             elapsed = time.time() - start_time
 
-            print(f"  ✓ Success in {elapsed:.2f}s")
+            print(f"  Success in {elapsed:.2f}s")
             print(f"  Selected: {metadata.get('selected_model')}")
 
         except Exception as e:
-            print(f"  ✗ Failed: {str(e)}")
+            print(f"  [X] Failed: {str(e)}")
 
         finally:
             await ensemble.cleanup()

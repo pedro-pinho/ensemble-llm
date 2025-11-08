@@ -12,8 +12,7 @@ Edit `ensemble_llm/config.py` and find `COUNCIL_CONFIG`:
 COUNCIL_CONFIG = {
     "enabled": True,              # Enable council mode
     "synthesis_mode": True,       # Enable synthesis
-    "filter_ai_meta_talk": True,  # Enable filtering ✓
-    # ... rest of config
+    "filter_ai_meta_talk": True,  # Enable filtering     # ... rest of config
 }
 ```
 
@@ -125,15 +124,15 @@ CRITICAL INSTRUCTIONS:
 1. The user is a HUMAN - they do NOT know about this AI council
 2. Synthesize the best insights into ONE direct answer
 3. Write as if answering directly - NO phrases like:
-   ❌ "As an AI"
-   ❌ "I don't have access to"
-   ❌ "The council discussed"
+   "As an AI"
+   "I don't have access to"
+   "The council discussed"
    etc.
 
 4. Instead, write DIRECT, AUTHORITATIVE answers:
-   ✓ State facts directly
-   ✓ Provide value and insights
-   ✓ Write like an expert explaining to a human
+   State facts directly
+   Provide value and insights
+   Write like an expert explaining to a human
 
 FINAL ANSWER FOR THE USER (direct, no AI self-references):"""
 ```
@@ -299,9 +298,9 @@ response_lower = response.lower()
 issues = [phrase for phrase in unwanted if phrase in response_lower]
 
 if issues:
-    print(f"⚠️ Found meta-talk: {issues}")
+    print(f"Found meta-talk: {issues}")
 else:
-    print("✓ Clean response!")
+    print("Clean response!")
 ```
 
 ### Test 3: Verbose Mode Inspection

@@ -1,81 +1,119 @@
 # Ensemble LLM
 
-A powerful local LLM ensemble system that runs multiple language models in parallel and uses voting mechanisms to provide the best possible answers. Features include multi-model consensus, web search integration, and intelligent response selection.
+> A powerful local LLM ensemble system that combines multiple AI models through intelligent voting and synthesis to deliver superior answers.
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Features
+---
 
-- **Multi-Model Ensemble**: Run multiple LLMs simultaneously and get the best answer through intelligent voting
-- **Web Search Integration**: Automatically search the web for current information when needed
-- **Smart Consensus**: Advanced voting system based on response similarity, quality, and confidence
-- **Local Execution**: Everything runs locally on your machine - no API keys required
-- **Optimized for Apple Silicon**: Fully utilizes M1/M2 Mac capabilities
-- **Extensive Logging**: Detailed logs for debugging and monitoring
-- **Interactive Mode**: CLI interface for continuous conversations
+## Overview
 
-## Requirements
+Ensemble LLM runs multiple local language models in parallel and uses advanced voting algorithms to select or synthesize the best possible answer. Unlike single-model systems, it leverages diverse AI perspectives to provide more comprehensive, balanced, and accurate responses.
 
-- macOS (Apple Silicon recommended) or Linux
-- Python 3.8+
-- 16GB+ RAM (24GB recommended for running 4+ models)
-- 20GB+ free disk space for models
-- Ollama installed
+### Key Features
+
+**Multi-Model Consensus**
+- Run 3-5 models simultaneously through Ollama
+- Intelligent voting based on response similarity and quality
+- Automatic model selection and rotation
+
+**Council & Synthesis Mode**
+- Models collaborate as an AI council with role awareness
+- Winning model synthesizes all perspectives into one coherent answer
+- Automatic filtering of AI meta-talk for clean, professional outputs
+
+**Web Search Integration**
+- Automatically detects when queries need current information
+- Enhances prompts with real-time web search results
+- Seamless fallback for up-to-date knowledge
+
+**Intelligent Learning System**
+- Query caching with similarity matching
+- Pattern recognition for query optimization
+- Adaptive model performance tracking
+- Precomputation of common queries
+
+**Speed Optimization**
+- Multiple speed modes: turbo, fast, balanced, quality
+- Model warmup and parallel execution
+- Smart timeout management
+- Staggered model starts to prevent resource conflicts
+
+**Persistent Memory**
+- ChromaDB-based vector storage for conversation history
+- Semantic search for relevant context
+- Fact tracking and inference engine
+- User preference learning
+
+**Web GUI & CLI**
+- Beautiful FastAPI web interface with real-time updates
+- Full-featured command-line tool
+- WebSocket support for streaming responses
+- Session management and chat history
+
+---
 
 ## Quick Start
 
-### 1. Clone the repository
+### Prerequisites
+
+- **Python 3.8+**
+- **Ollama** - [Install Ollama](https://ollama.ai/)
+- **16GB+ RAM** (24GB recommended)
+- **20GB+ free disk space** for models
+
+### Installation
+
+#### macOS / Linux
+
 ```bash
+# Clone the repository
 git clone https://github.com/pedropinho/ensemble-llm.git
 cd ensemble-llm
-```
 
-### 2. Run the installer
-```bash
+# Run the automated installer
 chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-This will:
-- Install Ollama (if not already installed)
-- Set up Python virtual environment
+The installer will:
+- Install Ollama (if needed)
+- Create Python virtual environment
 - Install all dependencies
 - Download recommended models
 - Run health checks
 
-### 3. Run your first query
-```bash
-# Activate the environment
-source venv/bin/activate
+#### Windows
 
-# Simple query
-python -m ensemble_llm.main "What is quantum computing?"
+```powershell
+# Clone or download the repository
+git clone https://github.com/pedropinho/ensemble-llm.git
+cd ensemble-llm
 
-# With web search for current events
-python -m ensemble_llm.main -w "What's the latest news about AI?"
+# Run the setup script
+scripts\setup_windows.bat
 
-# Interactive mode
-python -m ensemble_llm.main -i -w
+# Start Ollama with GPU optimization
+scripts\start_ollama_windows.bat
 ```
 
-## Installation (Manual)
+#### Manual Installation
 
-### Step 1: Install Ollama
 ```bash
-# macOS
-brew install ollama
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Linux
-curl -fsSL https://ollama.ai/install.sh | sh
-```
+# Install dependencies
+pip install -r requirements.txt
 
-### Step 2: Start Ollama and pull models
-```bash
-# Start Ollama service
-ollama serve
+# Install and start Ollama
+# macOS: brew install ollama
+# Linux: curl -fsSL https://ollama.ai/install.sh | sh
+# Windows: Download from ollama.ai
 
-# Pull recommended models (in another terminal)
+# Pull recommended models
 ollama pull llama3.2:3b
 ollama pull phi3.5:latest
 ollama pull qwen2.5:7b
@@ -83,358 +121,663 @@ ollama pull mistral:7b-instruct-q4_K_M
 ollama pull gemma2:2b
 ```
 
-### Step 3: Set up Python environment
-```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Step 4: Verify installation
-```bash
-# Check Ollama setup
-./scripts/check_ollama.sh
-
-# Test ensemble system
-python -m ensemble_llm.main "Hello, how are you?"
-```
-
-
-## Windows Installation and Setup 🪟
-
-### Prerequisites
-
-1. **Python 3.8+**
-   - Download from [python.org](https://python.org)
-   - ✅ **Important**: Check "Add Python to PATH" during installation
-
-2. **Ollama for Windows**
-   - Download from [ollama.ai/download/windows](https://ollama.ai/download/windows)
-   - Run the installer (requires Windows 10/11)
-
-3. **Git for Windows** (optional but recommended)
-   - Download from [git-scm.com](https://git-scm.com)
-
-4. **NVIDIA GPU** (optional but recommended)
-   - Install [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) for GPU acceleration
-   - Ensure you have the latest NVIDIA drivers
-
-### Quick Setup (Windows)
-
-1. **Clone or download the repository**
-```powershell
-# Using Git
-git clone https://github.com/yourusername/ensemble-llm.git
-cd ensemble-llm
-
-# Or download and extract the ZIP file from GitHub
-```
-
-2. **Run the Windows setup script**
-```powershell
-# In PowerShell or Command Prompt
-scripts\setup_windows.bat
-```
-
-This will:
-- Check Python and Ollama installation
-- Create virtual environment
-- Install all dependencies
-- Create necessary directories
-
-3. **Start Ollama with GPU optimization**
-```powershell
-scripts\start_ollama_windows.bat
-```
-
-4. **Pull models**
-```powershell
-# Activate virtual environment
-venv\Scripts\activate
-
-# Pull recommended models for GPU
-ollama pull llama3.2:3b
-ollama pull phi3.5
-ollama pull qwen2.5:7b
-ollama pull mistral:7b-instruct-q4_K_M
-```
-
-### Running on Windows
-
-#### Basic Usage
-```powershell
-# Activate virtual environment
-venv\Scripts\activate
-
-# Run a query
-python -m ensemble_llm.main "Your question here"
-
-# With GPU optimization
-set OLLAMA_NUM_GPU=999
-python -m ensemble_llm.main --speed fast "Your question"
-
-# Interactive mode
-python -m ensemble_llm.main -i
-```
-
-#### PowerShell Alias (Optional)
-Add to your PowerShell profile (`$PROFILE`):
-```powershell
-function ensemble {
-    & "$env:USERPROFILE\ensemble-llm\venv\Scripts\python.exe" -m ensemble_llm.main $args
-}
-```
-
-Then use: `ensemble "Your question"`
-
-### GPU Optimization (Windows)
-
-#### Check GPU Status
-```powershell
-# Run the benchmark script
-python scripts\benchmark_windows.py
-```
-
-#### Environment Variables for GPU
-```powershell
-# Set these before running for maximum GPU usage
-set OLLAMA_NUM_GPU=999          # Use all GPU layers
-set CUDA_VISIBLE_DEVICES=0      # Use first GPU (or 0,1 for multi-GPU)
-set OLLAMA_MAX_LOADED_MODELS=4  # Load more models with GPU memory
-set OLLAMA_KEEP_ALIVE=10m       # Keep models in VRAM longer
-```
-
-#### Recommended Configurations by GPU
-
-| GPU VRAM | Recommended Models | Max Concurrent |
-|----------|-------------------|----------------|
-| 6GB | `tinyllama:1b`, `gemma2:2b`, `llama3.2:3b` | 3 |
-| 8GB | `llama3.2:3b`, `phi3.5`, `qwen2.5:7b`, `mistral:7b` | 4 |
-| 12GB | `llama3.1:8b`, `qwen2.5:7b`, `mistral:7b`, `codellama:7b` | 4 |
-| 16GB | `llama3.1:13b`, `mixtral:8x7b-q3`, `qwen2.5:7b` | 3 |
-| 24GB | `llama3.1:70b-q2`, `mixtral:8x7b`, `llama3.1:13b` | 2-3 |
-
-### Windows-Specific Features
-
-#### 1. Process Priority Optimization
-```python
-# The system automatically sets Ollama to high priority on Windows
-python -m ensemble_llm.main --optimize-windows "Your question"
-```
-
-#### 2. GPU Memory Monitoring
-```powershell
-# Monitor GPU usage while running
-nvidia-smi -l 1
-
-# In another terminal
-python -m ensemble_llm.main -i --speed turbo
-```
-
-#### 3. Windows Task Scheduler (Auto-warmup)
-Create a scheduled task to warmup models on system start:
-```powershell
-# Create warmup script: warmup.bat
-@echo off
-cd C:\path\to\ensemble-llm
-call venv\Scripts\activate
-python -c "from ensemble_llm.fast_mode import ModelWarmup; import asyncio; mw = ModelWarmup(); asyncio.run(mw.parallel_warmup(['llama3.2:3b', 'phi3.5:latest']))"
-```
-
-### Troubleshooting (Windows)
-
-#### Ollama not found
-```powershell
-# Add Ollama to PATH manually
-set PATH=%PATH%;%LOCALAPPDATA%\Programs\Ollama
-
-# Or reinstall Ollama and ensure "Add to PATH" is checked
-```
-
-#### GPU not detected
-```powershell
-# Check CUDA installation
-nvidia-smi
-
-# Check if Ollama detects GPU
-ollama run llama3.2:3b --verbose
-
-# Should show: "Loading model on GPU..."
-```
-
-#### Permission errors
-```powershell
-# Run PowerShell as Administrator
-# Or ensure your user has write permissions to the project directory
-```
-
-#### Memory errors with multiple models
-```powershell
-# Reduce number of concurrent models
-python -m ensemble_llm.main --models llama3.2:3b gemma2:2b --speed fast "Query"
-
-# Or use smaller quantized versions
-ollama pull llama3.2:1b  # Smaller version
-```
-
-### Windows Performance Tips
-
-1. **Use GPU-optimized models**: Models with Q4_K_M quantization work best on GPUs
-2. **Close unnecessary programs**: Free up RAM and VRAM
-3. **Use Windows GPU scheduling**: Settings → System → Display → Graphics settings → Hardware-accelerated GPU scheduling
-4. **Disable Windows Defender scanning** for the Ollama models directory (with caution)
-5. **Use NVMe SSD** for model storage if possible
-
-### Example: Maximum Performance on Windows Gaming PC
-```powershell
-# For a system with RTX 4090 (24GB VRAM), 64GB RAM
-
-# Set environment
-set OLLAMA_NUM_GPU=999
-set OLLAMA_MAX_LOADED_MODELS=6
-set CUDA_VISIBLE_DEVICES=0
-
-# Start Ollama
-scripts\start_ollama_windows.bat
-
-# Use large models
-python -m ensemble_llm.main ^
-  --models llama3.1:13b mixtral:8x7b qwen2.5:14b ^
-  --speed balanced ^
-  "Complex question requiring deep reasoning"
-```
-
+---
 
 ## Usage
 
-### Basic Usage
+### Web Interface (Recommended)
+
+Start the web GUI:
+
 ```bash
-# Simple query with default models
-python -m ensemble_llm.main "Explain machine learning"
+# Activate virtual environment
+source venv/bin/activate
 
-# Verbose mode - see all model responses
-python -m ensemble_llm.main -v "What is the meaning of life?"
-
-# Enable web search for current information
-python -m ensemble_llm.main -w "Current stock price of Apple"
-
-# Interactive chat mode
-python -m ensemble_llm.main -i
+# Start web server
+python run_web_gui.py
 ```
 
-### Advanced Usage
+Then open http://localhost:8000 in your browser.
+
+**Features:**
+- Real-time chat interface
+- Response streaming via WebSockets
+- Session management
+- Speed mode selection
+- Web search toggle
+- Chat history
+
+### Command Line
+
 ```bash
-# Use specific models
-python -m ensemble_llm.main --models llama3.2:3b phi3.5:latest "Quick question"
+# Activate virtual environment
+source venv/bin/activate
 
-# Debug mode with detailed logging
-python -m ensemble_llm.main --log-level DEBUG -v "Test query"
+# Basic query
+python -m ensemble_llm.main "What is quantum computing?"
 
-# Combine all features
-python -m ensemble_llm.main -i -w -v --models llama3.2:3b qwen2.5:7b mistral:7b
+# With web search for current information
+python -m ensemble_llm.main -w "What's the latest news about AI?"
+
+# Interactive mode
+python -m ensemble_llm.main -i
+
+# Verbose mode (see all model responses)
+python -m ensemble_llm.main -v "Explain Docker containers"
+
+# Speed modes
+python -m ensemble_llm.main --speed turbo "Quick question"
+python -m ensemble_llm.main --speed balanced "Normal question"
+python -m ensemble_llm.main --speed quality "Complex analysis needed"
+
+# Custom models
+python -m ensemble_llm.main --models llama3.2:3b phi3.5 qwen2.5:7b "Question"
+
+# Combine options
+python -m ensemble_llm.main -i -w -v --speed balanced
 ```
 
 ### Python API
+
 ```python
-from ensemble_llm import EnsembleLLM
 import asyncio
+from ensemble_llm import EnsembleLLM
 
 async def main():
-    # Initialize ensemble with custom models
+    # Initialize ensemble
     ensemble = EnsembleLLM(
         models=['llama3.2:3b', 'phi3.5:latest', 'qwen2.5:7b'],
-        enable_web_search=True
+        enable_web_search=True,
+        speed_mode='balanced'
     )
-    
-    # Get ensemble response
+
+    await ensemble.async_init()
+
+    # Query the ensemble
     response, metadata = await ensemble.ensemble_query(
-        "What is the future of AI?",
+        "What are the key principles of good API design?",
         verbose=True
     )
-    
-    print(f"Best answer from {metadata['selected_model']}:")
-    print(response)
+
+    print(f"Answer: {response}")
+    print(f"Selected model: {metadata['selected_model']}")
     print(f"Consensus score: {metadata['consensus_score']:.2f}")
-    
-    # Cleanup
+
     await ensemble.cleanup()
 
 asyncio.run(main())
 ```
 
-## Model Recommendations
+---
 
-Based on your available RAM:
+## Architecture
 
-### 16GB RAM
-- Run 3-4 small models (3B parameters)
-- Recommended: `llama3.2:3b`, `phi3.5:latest`, `gemma2:2b`
+### Core Components
 
-### 24GB RAM (Optimal)
-- Run 4-5 medium models (3-7B parameters)
-- Recommended: `llama3.2:3b`, `phi3.5:latest`, `qwen2.5:7b`, `mistral:7b`, `gemma2:2b`
+#### 1. **Ensemble Orchestrator** (`main.py`)
+- Manages multi-model query distribution
+- Implements voting algorithms (consensus + quality scoring)
+- Handles council mode and synthesis
+- Coordinates all subsystems
 
-### 32GB+ RAM
-- Run 3-4 large models or 6+ small models
-- Add: `mixtral:8x7b-instruct-q3_K_M`, `llama3.1:70b-instruct-q2_K`
+#### 2. **Council & Synthesis System**
+Models are aware they're collaborating:
+- Each model knows its role and specialty
+- Internal discussion phase with role clarity
+- Winning model synthesizes all perspectives
+- Automatic meta-talk filtering for clean outputs
 
-See [docs/MODELS.md](docs/MODELS.md) for detailed model information.
+#### 3. **Memory System** (`memory_system.py`)
+- ChromaDB vector storage for semantic search
+- Conversation history with embeddings
+- Fact tracking and inference engine
+- User preference learning
 
-## How It Works
+#### 4. **Learning System** (`learning_system.py`)
+- Query cache with similarity matching
+- Pattern recognition and optimization
+- Model performance tracking
+- Adaptive model selection
 
-1. **Query Distribution**: Your question is sent to multiple LLMs in parallel
-2. **Response Generation**: Each model generates its answer independently
-3. **Web Search** (optional): If current information is needed, web search results are added to the context
-4. **Similarity Analysis**: Responses are compared using TF-IDF vectorization
-5. **Consensus Scoring**: Each response gets a consensus score based on agreement with other models
-6. **Quality Scoring**: Responses are evaluated for length, structure, and detail
-7. **Final Selection**: The response with the highest combined score is selected
+#### 5. **Web Search Integration** (`web_search.py`)
+- Automatic detection of current-info queries
+- Multi-source web scraping
+- Context enhancement for model prompts
+
+#### 6. **Performance Tracking** (`performance_tracker.py`)
+- Response time monitoring
+- Success rate tracking
+- Model rotation based on performance
+- Historical analytics
+
+#### 7. **Web Server** (`web_server.py`)
+- FastAPI with WebSocket support
+- Session management
+- Real-time streaming
+- Static file serving
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ User Query: "Explain quantum computing"                     │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+                    ┌──────────┐
+                    │  Memory  │ (Check for relevant context)
+                    └──────────┘
+                          ↓
+              ┌───────────────────────┐
+              │  Web Search (if needed)│
+              └───────────────────────┘
+                          ↓
+         ┌────────────────────────────────────────┐
+         │    Council Discussion (Parallel)       │
+         │                                        │
+         │  ┌──────────┐  ┌──────────┐  ┌──────┐│
+         │  │llama3.2  │  │  phi3.5  │  │qwen  ││
+         │  │(general) │  │(reasoning)│  │(tech)││
+         │  └──────────┘  └──────────┘  └──────┘│
+         │       ↓              ↓           ↓    │
+         │   Response      Response    Response  │
+         └────────────────────────────────────────┘
+                          ↓
+              ┌──────────────────────┐
+              │   Voting Algorithm   │
+              │                      │
+              │ • Similarity scoring │
+              │ • Quality evaluation │
+              │ • Performance history│
+              └──────────────────────┘
+                          ↓
+                  Winner: phi3.5
+                          ↓
+              ┌──────────────────────┐
+              │  Synthesis Phase     │
+              │                      │
+              │ phi3.5 combines all  │
+              │ responses into one   │
+              │ coherent answer      │
+              └──────────────────────┘
+                          ↓
+              ┌──────────────────────┐
+              │  Clean Response      │
+              │                      │
+              │ • Remove AI meta-talk│
+              │ • Direct, authoritative│
+              │ • No disclaimers     │
+              └──────────────────────┘
+                          ↓
+         ┌────────────────────────────────┐
+         │ Final Answer to User           │
+         │ (Clean, comprehensive, balanced)│
+         └────────────────────────────────┘
+```
+
+### Voting Algorithm
+
+The system uses a weighted scoring mechanism:
+
+**Consensus Score** (70% weight by default):
+- TF-IDF vectorization of responses
+- Cosine similarity matrix
+- Average similarity to other responses
+
+**Quality Score** (30% weight):
+- Response length (optimal range)
+- Structure (paragraphs, sentences)
+- Response time (faster = bonus)
+- Historical performance (if available)
+- Web search usage (bonus if applicable)
+
+Final selection: `argmax(consensus_score * 0.7 + quality_score * 0.3)`
+
+---
 
 ## Configuration
 
-Edit `ensemble_llm/config.py` to customize:
+All settings are in `ensemble_llm/config.py`:
 
-- Model configurations and specialties
-- Voting weights (consensus vs quality)
-- Web search settings
-- Retry logic and timeouts
+### Council Mode
 
-## Troubleshooting
+```python
+COUNCIL_CONFIG = {
+    "enabled": True,              # Enable council awareness
+    "synthesis_mode": True,       # Winning model synthesizes all responses
+    "filter_ai_meta_talk": True,  # Remove "as an AI" phrases
 
-### Models not responding
-```bash
-# Check Ollama service
-./scripts/check_ollama.sh
-
-# Restart Ollama
-killall ollama
-ollama serve
+    # Customize prompts
+    "system_prompt_template": "...",     # How models see the council
+    "synthesis_prompt_template": "...",  # Synthesis instructions
+}
 ```
 
-### Out of memory errors
-- Reduce number of concurrent models
-- Use smaller/more quantized models
-- Close other applications
+### Speed Profiles
 
-### Slow responses
-- Check GPU acceleration: `ollama list`
-- Reduce model size or number
-- Increase timeout values in config
+```python
+SPEED_PROFILES = {
+    "turbo": {
+        "max_models": 2,
+        "timeout": 10,
+        "strategy": "race",  # First 1-2 responses
+    },
+    "fast": {
+        "max_models": 3,
+        "timeout": 15,
+        "strategy": "cascade",  # Staggered starts
+    },
+    "balanced": {
+        "max_models": 4,
+        "timeout": 25,
+        "strategy": "parallel",  # All models
+    },
+    "quality": {
+        "max_models": 5,
+        "timeout": 45,
+        "strategy": "parallel",
+    },
+}
+```
+
+### Model Configurations
+
+```python
+MODEL_CONFIGS = {
+    "llama3.2:3b": {
+        "memory_gb": 3,
+        "specialties": ["general", "conversation", "quick"],
+        "timeout": 30,
+    },
+    # Add your models...
+}
+```
+
+### Features Toggle
+
+```python
+FEATURES = {
+    "web_search": True,
+    "adaptive_models": True,
+    "performance_tracking": True,
+    "caching": True,
+    "verbose_logging": True,
+    # ...
+}
+```
+
+---
+
+## Model Recommendations
+
+### By Available RAM
+
+**16GB RAM** (3-4 small models):
+- llama3.2:3b
+- phi3.5:latest
+- gemma2:2b
+
+**24GB RAM** (4-5 medium models):
+- llama3.2:3b
+- phi3.5:latest
+- qwen2.5:7b
+- mistral:7b-instruct-q4_K_M
+- gemma2:2b
+
+**32GB+ RAM** (large models or 6+ small):
+- mixtral:8x7b-instruct-q3_K_M
+- llama3.1:70b-instruct-q2_K
+- Or 6+ smaller models
+
+### By GPU (Windows/CUDA)
+
+See `WINDOWS_GPU_CONFIGS` in config.py for GPU-optimized recommendations.
+
+---
+
+## Development
+
+### Project Structure
+
+```
+ensemble-llm/
+├── ensemble_llm/          # Core package
+│   ├── main.py           # Ensemble orchestrator
+│   ├── config.py         # All configuration
+│   ├── memory_system.py  # ChromaDB memory
+│   ├── learning_system.py # Query cache & learning
+│   ├── performance_tracker.py  # Model analytics
+│   ├── web_server.py     # FastAPI server
+│   ├── web_search.py     # Web search integration
+│   ├── fast_mode.py      # Speed optimizations
+│   ├── verbose_logger.py # Detailed logging
+│   ├── platform_utils.py # OS-specific utils
+│   └── static/           # Web GUI assets
+├── scripts/              # Utility scripts
+│   ├── install.sh        # Automated installer
+│   ├── check_ollama.sh   # Health check
+│   ├── setup_windows.bat # Windows setup
+│   └── view_logs.py      # Log viewer
+├── examples/             # Usage examples
+├── docs/                 # Documentation
+├── requirements.txt      # Python dependencies
+├── run_web_gui.py       # Web server entry point
+└── README.md            # This file
+```
+
+### Adding New Models
+
+1. Add configuration to `ensemble_llm/config.py`:
+
+```python
+MODEL_CONFIGS["your-model:tag"] = {
+    "memory_gb": 4,
+    "specialties": ["domain", "task"],
+    "timeout": 30,
+    "description": "Model description",
+}
+```
+
+2. Pull the model:
+```bash
+ollama pull your-model:tag
+```
+
+3. Use it:
+```bash
+python -m ensemble_llm.main --models your-model:tag llama3.2:3b "Test"
+```
+
+### Creating Custom Prompts
+
+Edit `COUNCIL_CONFIG` in `config.py`:
+
+```python
+"system_prompt_template": """
+INTERNAL SYSTEM MESSAGE:
+
+You are {model_name}, specializing in {model_specialty}.
+
+Council members: {council_members}
+
+Provide your expert analysis on:
+"""
+```
+
+### Extending the Web GUI
+
+Static files are in `ensemble_llm/static/`:
+- `static/index.html` - Main page
+- `static/css/` - Stylesheets
+- `static/js/` - JavaScript
+
+WebSocket endpoints in `web_server.py`:
+- `/ws` - Main WebSocket for queries
+- `/api/` - REST endpoints
+
+### Running Tests
+
+```bash
+# Check Ollama connection
+./scripts/check_ollama.sh
+
+# Test basic functionality
+python -m ensemble_llm.main "Hello"
+
+# View logs
+python scripts/view_logs.py
+
+# Run examples
+python examples/synthesis_demo.py
+```
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+We welcome contributions! Here's how to help:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+### Getting Started
+
+1. **Fork the repository**
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/ensemble-llm.git
+   cd ensemble-llm
+   ```
+
+2. **Create a branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+3. **Make your changes**
+   - Follow existing code style
+   - Add docstrings to functions
+   - Update documentation
+
+4. **Test your changes**
+   ```bash
+   # Test CLI
+   python -m ensemble_llm.main "Test query"
+
+   # Test Web GUI
+   python run_web_gui.py
+   ```
+
+5. **Commit and push**
+   ```bash
+   git add .
+   git commit -m "feat: add your feature description"
+   git push origin feature/your-feature-name
+   ```
+
+6. **Open a Pull Request**
+   - Describe what you changed and why
+   - Reference any related issues
+
+### Contribution Ideas
+
+#### Bug Fixes
+- Model timeout issues
+- Memory leaks
+- Web GUI glitches
+
+#### Features
+- New voting algorithms
+- Additional web search sources
+- Model specialization improvements
+- UI/UX enhancements
+
+#### Documentation
+- Tutorial videos
+- Use case examples
+- API documentation
+- Translation to other languages
+
+#### Testing
+- Unit tests for core components
+- Integration tests
+- Performance benchmarks
+
+#### Design
+- Web GUI improvements
+- CLI output formatting
+- Visualization of voting process
+
+### Code Guidelines
+
+**Style:**
+- Use type hints where possible
+- Follow PEP 8
+- Keep functions focused and small
+- Add comments for complex logic
+
+**Documentation:**
+- Docstrings for all public functions
+- Update README for new features
+- Add examples for new functionality
+
+**Configuration:**
+- All hardcoded values should go in `config.py`
+- Use constants over magic numbers
+- Make features toggleable via `FEATURES`
+
+**Error Handling:**
+- Always use try/except for external calls (Ollama, web, etc.)
+- Log errors appropriately
+- Provide fallback behavior
+
+---
+
+## Troubleshooting
+
+### Ollama Connection Issues
+
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Start Ollama
+ollama serve
+
+# Check available models
+ollama list
+```
+
+### Memory Issues
+
+**Reduce concurrent models:**
+```bash
+python -m ensemble_llm.main --models llama3.2:3b phi3.5 "Question"
+```
+
+**Use smaller models:**
+```bash
+ollama pull llama3.2:1b
+ollama pull gemma2:2b
+```
+
+**Use turbo mode:**
+```bash
+python -m ensemble_llm.main --speed turbo "Question"
+```
+
+### Performance Issues
+
+**Enable GPU acceleration** (if available):
+- Ensure latest Ollama version
+- Check GPU drivers
+- Monitor with `nvidia-smi` (NVIDIA) or Activity Monitor (macOS)
+
+**Optimize for your system:**
+- Adjust `SPEED_PROFILES` in config.py
+- Reduce `max_models` per profile
+- Increase timeouts if models are slow
+
+### Web GUI Not Loading
+
+```bash
+# Check port availability
+lsof -i :8000
+
+# Try different port
+uvicorn ensemble_llm.web_server:app --port 8080
+```
+
+### No Web Search Results
+
+- Check internet connection
+- Verify `FEATURES["web_search"] = True`
+- Check web_search.py for errors in logs
+
+---
+
+## FAQ
+
+**Q: How many models should I run?**
+A: 3-5 models is optimal. More models = better consensus but slower responses.
+
+**Q: Can I use API models (OpenAI, Claude)?**
+A: Currently only Ollama (local models) is supported. API support is planned.
+
+**Q: Does it work offline?**
+A: Yes, except for web search feature.
+
+**Q: How much does it cost?**
+A: Free! Everything runs locally. You only pay for hardware/electricity.
+
+**Q: Can I run it on a laptop?**
+A: Yes, with 16GB+ RAM and smaller models (3B parameters).
+
+**Q: What's the difference from LangChain?**
+A: LangChain is a framework for building LLM apps. Ensemble LLM is a specific application focused on multi-model consensus and synthesis.
+
+**Q: Does it remember previous conversations?**
+A: Yes, via the memory system (ChromaDB). Enable with `enable_memory=True`.
+
+**Q: Can I customize the voting algorithm?**
+A: Yes, edit `weighted_voting()` in `main.py` and adjust weights in `ENSEMBLE_CONFIG`.
+
+---
+
+## Performance Benchmarks
+
+Typical response times (3 models, balanced mode):
+
+| Query Type | Time | Notes |
+|------------|------|-------|
+| Simple fact | 5-8s | Cached: <0.1s |
+| Explanation | 8-12s | With synthesis |
+| Complex analysis | 12-18s | Quality mode recommended |
+| With web search | +3-5s | Added to base time |
+
+Model loading (first query): +2-5s per model
+
+---
+
+## Roadmap
+
+### v1.1 (Current)
+- Council mode with synthesis
+- AI meta-talk filtering
+- Web GUI
+- Memory system
+
+### v1.2 (Planned)
+- [ ] API model support (OpenAI, Anthropic, etc.)
+- [ ] Multi-language support
+- [ ] Voting algorithm plugins
+- [ ] Advanced analytics dashboard
+
+### v1.3 (Future)
+- [ ] Fine-tuning integration
+- [ ] Custom model training
+- [ ] Distributed execution
+- [ ] Browser extension
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
 
 ## Acknowledgments
 
-- [Ollama](https://ollama.ai/) for making local LLM deployment easy
-- The open-source AI community for providing amazing models
+- [Ollama](https://ollama.ai/) - Local LLM runtime
+- [FastAPI](https://fastapi.tiangolo.com/) - Web framework
+- [ChromaDB](https://www.trychroma.com/) - Vector database
+- [scikit-learn](https://scikit-learn.org/) - ML algorithms for voting
+
+---
+
+## Contact & Support
+
+- **Issues**: [GitHub Issues](https://github.com/pedropinho/ensemble-llm/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/pedropinho/ensemble-llm/discussions)
+- **Documentation**: See `/docs` folder
+- **Examples**: See `/examples` folder
+
+---
+
+**Built with for the local LLM community**

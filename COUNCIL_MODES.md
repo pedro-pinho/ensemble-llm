@@ -165,23 +165,23 @@ Notice: Synthesis combines technical depth, applications, and challenges into on
 ## When to Use Each Mode
 
 ### Use Standard Mode when:
-- ✅ Speed is critical
-- ✅ Simple, straightforward questions
-- ✅ Testing or debugging
-- ✅ Limited computational resources
+- Speed is critical
+- Simple, straightforward questions
+- Testing or debugging
+- Limited computational resources
 
 ### Use Council Mode when:
-- ✅ Want models to leverage their specialties
-- ✅ Complex topics benefiting from multiple angles
-- ✅ Don't mind meta-discussion in responses
-- ✅ Debugging to see how models think about council
+- Want models to leverage their specialties
+- Complex topics benefiting from multiple angles
+- Don't mind meta-discussion in responses
+- Debugging to see how models think about council
 
 ### Use Council + Synthesis when:
-- ✅ Quality is priority over speed
-- ✅ Complex questions needing comprehensive answers
-- ✅ Want clean, professional output
-- ✅ Production use cases
-- ✅ User-facing applications
+- Quality is priority over speed
+- Complex questions needing comprehensive answers
+- Want clean, professional output
+- Production use cases
+- User-facing applications
 
 ---
 
@@ -352,4 +352,4 @@ Synthesis:  Models(aware) → Vote → Winner synthesizes all → Final
 1. Edit `ensemble_llm/config.py`
 2. Set `COUNCIL_CONFIG["enabled"] = True` and `synthesis_mode = True`
 
-**Result:** Better, more comprehensive answers with no meta-discussion! 🎯
+**Result:** Better, more comprehensive answers with no meta-discussion! 

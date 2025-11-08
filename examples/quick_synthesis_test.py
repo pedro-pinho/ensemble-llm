@@ -43,7 +43,7 @@ async def quick_test():
     )
 
     await ensemble.async_init()
-    print("✓ Ensemble ready\n")
+    print("Ensemble ready\n")
 
     # Test question
     question = "What are the main benefits of using Docker containers?"

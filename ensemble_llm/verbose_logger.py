@@ -81,7 +81,7 @@ Web Search: {'Yes' if web_search else 'No'}
     def log_model_response(self, model: str, response: Dict, query_time: float):
         """Log individual model response"""
 
-        success_indicator = "✓ SUCCESS" if response.get("success") else "✗ FAILED"
+        success_indicator = "SUCCESS" if response.get("success") else "[X] FAILED"
 
         content = f"""
 {self.sub_separator}
@@ -176,7 +176,7 @@ REMOVED MODELS:
 
         for model in removed_models:
             reason = reasons.get(model, "Unknown")
-            content += f"  ✗ {model}\n"
+            content += f"  [X] {model}\n"
             content += f"    Reason: {reason}\n"
 
             if performance_data and model in performance_data:
@@ -191,7 +191,7 @@ REMOVED MODELS:
 
         content += f"\nADDED MODELS:\n"
         for model in added_models:
-            content += f"  ✓ {model}\n"
+            content += f"  {model}\n"
             if performance_data and model in performance_data:
                 perf = performance_data[model]
                 content += f"    Previous Performance:\n"

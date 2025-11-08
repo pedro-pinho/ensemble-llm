@@ -298,17 +298,17 @@ class ModelPerformanceTracker:
                 selection_rate = (data["times_selected"] / data["total_queries"]) * 100
                 avg_time = data["total_response_time"] / data["total_queries"]
 
-                status_emoji = {
-                    "healthy": "✅",
-                    "unhealthy": "⚠️",
-                    "underutilized": "📊",
-                    "slow": "🐢",
-                    "failing": "❌",
-                    "new": "🆕",
-                    "insufficient_data": "📈",
-                }.get(evaluation["status"], "❓")
+                status_prefix = {
+                    "healthy": "[OK]",
+                    "unhealthy": "[!]",
+                    "underutilized": "[~]",
+                    "slow": "[SLOW]",
+                    "failing": "[FAIL]",
+                    "new": "[NEW]",
+                    "insufficient_data": "[?]",
+                }.get(evaluation["status"], "[?]")
 
-                summary.append(f"\n{status_emoji} {model}:")
+                summary.append(f"\n{status_prefix} {model}:")
                 summary.append(f"   Status: {evaluation['status']}")
                 summary.append(f"   Score: {evaluation['score']:.2f}")
                 summary.append(f"   Success Rate: {success_rate:.1f}%")
@@ -505,7 +505,7 @@ class AdaptiveModelManager:
             except Exception as e:
                 self.logger.error(f"Error preloading {model}: {str(e)}")
 
-    def get_optimized_timeout(
+    def get_timeout(
         self, model: str, base_timeout: Optional[int] = None
     ) -> int:
         """Get optimized timeout for a model based on its performance history"""

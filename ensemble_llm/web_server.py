@@ -375,7 +375,7 @@ async def process_query(
         await log_streamer.send_query_start(query, session.ensemble.models)
 
         # Create a custom response handler to stream logs
-        original_query_method = session.ensemble.query_all_models_optimized
+        original_query_method = session.ensemble.query_all_models
 
         async def streaming_query_method(prompt: str) -> List[Dict]:
             """Wrapper to stream individual model responses"""
@@ -394,13 +394,13 @@ async def process_query(
             return responses
 
         # Temporarily replace the query method
-        session.ensemble.query_all_models_optimized = streaming_query_method
+        session.ensemble.query_all_models = streaming_query_method
 
         # Execute the query
         response, metadata = await session.ensemble.ensemble_query(query, verbose=False)
 
         # Restore original method
-        session.ensemble.query_all_models_optimized = original_query_method
+        session.ensemble.query_all_models = original_query_method
 
         # Send voting details
         await log_streamer.send_voting_details(metadata)

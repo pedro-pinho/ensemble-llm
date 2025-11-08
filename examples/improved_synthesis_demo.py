@@ -25,10 +25,10 @@ async def demo_clear_roles():
     print("IMPROVED COUNCIL + SYNTHESIS")
     print("=" * 70)
     print("\nKey improvements:")
-    print("1. ✓ Models know: THEY are AIs, USER is human")
-    print("2. ✓ Internal council discussion vs external user answer")
-    print("3. ✓ AI meta-talk automatically filtered from final output")
-    print("4. ✓ Direct, authoritative answers without disclaimers")
+    print("1. Models know: THEY are AIs, USER is human")
+    print("2. Internal council discussion vs external user answer")
+    print("3. AI meta-talk automatically filtered from final output")
+    print("4. Direct, authoritative answers without disclaimers")
     print("=" * 70)
 
     # Enable with improvements
@@ -76,9 +76,9 @@ async def demo_clear_roles():
         found_issues = [p for p in unwanted_patterns if p.lower() in response.lower()]
 
         if found_issues:
-            print(f"\n⚠️  WARNING: Found meta-talk: {', '.join(found_issues)}")
+            print(f"\nWARNING: Found meta-talk: {', '.join(found_issues)}")
         else:
-            print("\n✓ Clean response - no AI meta-talk detected")
+            print("\nClean response - no AI meta-talk detected")
 
     await ensemble.cleanup()
 
@@ -115,11 +115,11 @@ async def show_prompt_structure():
     print("-" * 70)
 
     print("\nKey points in the prompt:")
-    print("✓ 'INTERNAL SYSTEM MESSAGE' - clearly marked")
-    print("✓ 'YOU are an AI model' - explicit identity")
-    print("✓ 'The USER is a human' - clear distinction")
-    print("✓ 'This message is ONLY for you and other AI models'")
-    print("✓ 'The user does NOT see this council process'")
+    print("'INTERNAL SYSTEM MESSAGE' - clearly marked")
+    print("'YOU are an AI model' - explicit identity")
+    print("'The USER is a human' - clear distinction")
+    print("'This message is ONLY for you and other AI models'")
+    print("'The user does NOT see this council process'")
 
     print("\n" + "=" * 70)
 
@@ -205,13 +205,13 @@ async def test_filter_patterns():
         print(f"Test {i}:")
         print(f"Original: {text}")
 
-        filtered = ensemble.filter_ai_meta_talk(text)
+        filtered = ensemble.clean_response(text)
         print(f"Filtered: {filtered}")
 
         if text != filtered:
-            print("✓ Filter applied")
+            print("Filter applied")
         else:
-            print("○ No changes needed")
+            print("No changes needed")
 
         print()
 
@@ -295,8 +295,8 @@ if __name__ == "__main__":
         print("   - Sentence-level filtering (removes entire sentence)")
         print("   - Applied to both synthesized and fallback responses")
         print("\n3. SYNTHESIS INSTRUCTIONS")
-        print("   - Explicit list of phrases to avoid (❌)")
-        print("   - Examples of preferred style (✓)")
+        print("   - Explicit list of phrases to avoid ()")
+        print("   - Examples of preferred style ()")
         print("   - Emphasis on direct, authoritative answers")
         print("\n4. RESULT")
         print("   - Clean, professional responses")

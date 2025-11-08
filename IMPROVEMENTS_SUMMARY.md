@@ -6,8 +6,7 @@ You reported two critical issues:
 1. **AI meta-talk leaking to users** - Phrases like "as an AI", "I don't have access to" appearing in final answers
 2. **Model confusion about roles** - Models confused about whether they or the user are AIs
 
-Both issues have been **completely addressed**! ✅
-
+Both issues have been **completely addressed**! 
 ---
 
 ## What Changed
@@ -40,17 +39,17 @@ IMPORTANT DISTINCTIONS:
 ```
 CRITICAL INSTRUCTIONS:
 3. Write as if answering directly - NO phrases like:
-   ❌ "As an AI"
-   ❌ "I don't have access to"
-   ❌ "As a language model"
-   ❌ "The council discussed"
-   ❌ "Based on my training"
-   ❌ "I cannot"
+   "As an AI"
+   "I don't have access to"
+   "As a language model"
+   "The council discussed"
+   "Based on my training"
+   "I cannot"
 
 4. Instead, write DIRECT, AUTHORITATIVE answers:
-   ✓ State facts and information directly
-   ✓ Provide value and insights, not disclaimers
-   ✓ Write like a knowledgeable expert
+   State facts and information directly
+   Provide value and insights, not disclaimers
+   Write like a knowledgeable expert
 ```
 
 ### 3. **Automatic Meta-Talk Filtering**
@@ -87,9 +86,9 @@ platform. However, I don't have access to current data..."
 ### 4. **Applied Everywhere**
 
 The filter is applied to:
-- ✅ Synthesized responses
-- ✅ Fallback responses (if synthesis fails)
-- ✅ Original winning responses (if synthesis disabled)
+- Synthesized responses
+- Fallback responses (if synthesis fails)
+- Original winning responses (if synthesis disabled)
 
 **No meta-talk can escape!**
 
@@ -153,8 +152,7 @@ Edit `ensemble_llm/config.py`:
 COUNCIL_CONFIG = {
     "enabled": True,              # ← Council mode
     "synthesis_mode": True,       # ← Synthesis
-    "filter_ai_meta_talk": True,  # ← Meta-talk filtering ✓
-    # ...
+    "filter_ai_meta_talk": True,  # ← Meta-talk filtering     # ...
 }
 ```
 
@@ -175,9 +173,9 @@ print(f"Response: {response}")
 # Verify no meta-talk
 unwanted = ["as an ai", "i don't have", "the council"]
 if any(phrase in response.lower() for phrase in unwanted):
-    print("⚠️ Found meta-talk!")
+    print("Found meta-talk!")
 else:
-    print("✓ Clean!")
+    print("Clean!")
 ```
 
 ---
@@ -255,8 +253,7 @@ def filter_ai_meta_talk(self, text: str) -> str:
   ```
   Input: "Docker is useful. As an AI, I cannot verify this. It's popular."
   Phrase-only: "Docker is useful.  I cannot verify this. It's popular."
-  Sentence-level: "Docker is useful. It's popular." ✓
-  ```
+  Sentence-level: "Docker is useful. It's popular."   ```
 
 ### Prompt Structure
 
@@ -281,7 +278,7 @@ def filter_ai_meta_talk(self, text: str) -> str:
   ↓
 [User's question + all council responses]
   ↓
-[CRITICAL INSTRUCTIONS with ❌ and ✓ examples]
+[CRITICAL INSTRUCTIONS with and examples]
   ↓
 [Request for final answer]
 ```
@@ -419,10 +416,10 @@ python examples/improved_synthesis_demo.py
 ```
 
 Shows:
-- ✓ Role clarity demonstration
-- ✓ Filter testing with examples
-- ✓ Before/after comparisons
-- ✓ Complete workflow with verbose output
+- Role clarity demonstration
+- Filter testing with examples
+- Before/after comparisons
+- Complete workflow with verbose output
 
 ### Quick Test
 ```bash
@@ -452,7 +449,7 @@ async def test():
     assert "as an ai" not in response.lower()
     assert "the council" not in response.lower()
 
-    print("✓ All tests passed!")
+    print("All tests passed!")
     await ensemble.cleanup()
 
 asyncio.run(test())
@@ -462,23 +459,22 @@ asyncio.run(test())
 
 ## Summary
 
-### Problems Solved ✅
-
+### Problems Solved 
 | Issue | Solution | Result |
 |-------|----------|--------|
 | AI meta-talk in responses | Automatic filtering | Clean, direct answers |
 | Model confusion about roles | Explicit INTERNAL/USER distinction | Clear understanding |
 | Council discussion visible | "ONLY for AI models" messaging | Proper separation |
-| Disclaimers instead of answers | ❌/✓ examples in synthesis | Authoritative responses |
+| Disclaimers instead of answers | /examples in synthesis | Authoritative responses |
 
 ### Benefits
 
-✅ **Cleaner output** - No AI self-references
-✅ **Better UX** - Users get direct answers, not disclaimers
-✅ **Role clarity** - Models understand internal vs external
-✅ **Comprehensive** - Still combines all model insights
-✅ **Configurable** - Add patterns and customize prompts
-✅ **Fail-safe** - Filter applied even on fallback responses
+**Cleaner output** - No AI self-references
+**Better UX** - Users get direct answers, not disclaimers
+**Role clarity** - Models understand internal vs external
+**Comprehensive** - Still combines all model insights
+**Configurable** - Add patterns and customize prompts
+**Fail-safe** - Filter applied even on fallback responses
 
 ### Next Steps
 
@@ -497,4 +493,4 @@ See:
 - **CLAUDE.md** - Technical implementation
 - **examples/** - Working code examples
 
-The improvements are ready to use! 🚀
+The improvements are ready to use! 
