@@ -5,17 +5,28 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    Request,
+    UploadFile,
+    File,
+    HTTPException,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
 from collections import defaultdict
+import tempfile
+import shutil
 
 from .main import EnsembleLLM
 from .config import DEFAULT_MODELS
 from .learning_system import CacheManager
+from .document_processor import DocumentProcessor
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -450,3 +461,207 @@ async def forget_memory(request: Request, category: str = None, key: str = None)
         return JSONResponse({"status": "success"})
 
     return JSONResponse({"error": "Memory not initialized"})
+
+
+@app.post("/api/documents/upload")
+async def upload_document(request: Request, file: UploadFile = File(...)):
+    """Upload and process a document"""
+    session_id = request.cookies.get("session_id")
+    session = get_or_create_session(session_id)
+
+    # Create temporary file path first
+    temp_dir = Path(tempfile.gettempdir()) / "ensemble_llm_uploads"
+    temp_dir.mkdir(exist_ok=True)
+    temp_file_path = temp_dir / f"{uuid.uuid4()}_{file.filename}"
+
+    try:
+        # Initialize ensemble if not already done
+        if not session.ensemble:
+            session.ensemble = EnsembleLLM(models=DEFAULT_MODELS, verbose_logging=False)
+
+        # Check if memory manager exists
+        if not session.ensemble.memory_manager:
+            raise HTTPException(
+                status_code=500,
+                detail="Memory manager not initialized. Please try sending a query first."
+            )
+
+        # Check file type
+        allowed_extensions = {".pdf", ".docx"}
+        file_ext = Path(file.filename).suffix.lower()
+
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {file_ext}. Allowed: PDF, DOCX",
+            )
+
+        # Save uploaded file to temporary location
+        with temp_file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        logger.info(f"Processing document: {file.filename}")
+
+        # Process the document
+        processor = DocumentProcessor()
+
+        if not processor.can_process(temp_file_path):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot process file type {file_ext}. Required libraries may not be installed.",
+            )
+
+        processed_doc = processor.process_document(
+            temp_file_path,
+            metadata={
+                "original_filename": file.filename,
+                "uploaded_by": session_id,
+            },
+        )
+
+        # Store in memory system
+        chunks_data = [chunk.to_dict() for chunk in processed_doc.chunks]
+
+        document_id = session.ensemble.memory_manager.semantic_memory.store_document(
+            document_id=processed_doc.document_id,
+            filename=processed_doc.filename,
+            file_type=processed_doc.file_type,
+            total_pages=processed_doc.total_pages,
+            total_chunks=processed_doc.total_chunks,
+            chunks=chunks_data,
+            metadata=processed_doc.metadata,
+        )
+
+        logger.info(
+            f"Stored document {file.filename}: "
+            f"{processed_doc.total_pages} pages, {processed_doc.total_chunks} chunks"
+        )
+
+        return JSONResponse(
+            {
+                "status": "success",
+                "document_id": document_id,
+                "filename": processed_doc.filename,
+                "total_pages": processed_doc.total_pages,
+                "total_chunks": processed_doc.total_chunks,
+                "message": f"Successfully uploaded and processed {file.filename}",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"Error processing document: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error processing document: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process document: {str(e)}"
+        )
+    finally:
+        # Clean up temporary file
+        if temp_file_path.exists():
+            temp_file_path.unlink()
+
+
+@app.get("/api/documents")
+async def get_documents(request: Request):
+    """Get list of all uploaded documents"""
+    session_id = request.cookies.get("session_id")
+    session = get_or_create_session(session_id)
+
+    try:
+        # Initialize ensemble if not already done
+        if not session.ensemble:
+            session.ensemble = EnsembleLLM(models=DEFAULT_MODELS, verbose_logging=False)
+
+        # Check if memory manager exists
+        if not session.ensemble.memory_manager:
+            logger.warning("Memory manager not initialized, returning empty documents list")
+            return JSONResponse({"status": "success", "documents": []})
+
+        documents = session.ensemble.memory_manager.semantic_memory.get_all_documents()
+        return JSONResponse({"status": "success", "documents": documents})
+
+    except Exception as e:
+        logger.error(f"Error fetching documents: {str(e)}")
+        # Return empty list instead of error to allow UI to load
+        return JSONResponse({"status": "success", "documents": [], "error": str(e)})
+
+
+@app.delete("/api/documents/{document_id}")
+async def delete_document(request: Request, document_id: str):
+    """Delete a document and all its chunks"""
+    session_id = request.cookies.get("session_id")
+    session = get_or_create_session(session_id)
+
+    try:
+        # Initialize ensemble if not already done
+        if not session.ensemble:
+            session.ensemble = EnsembleLLM(models=DEFAULT_MODELS, verbose_logging=False)
+
+        # Check if memory manager exists
+        if not session.ensemble.memory_manager:
+            raise HTTPException(status_code=500, detail="Memory manager not initialized")
+
+        success = session.ensemble.memory_manager.semantic_memory.delete_document(
+            document_id
+        )
+
+        if success:
+            return JSONResponse(
+                {
+                    "status": "success",
+                    "message": f"Document {document_id} deleted successfully",
+                }
+            )
+        else:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete document: {str(e)}"
+        )
+
+
+@app.post("/api/documents/search")
+async def search_documents(request: Request):
+    """Search documents by query"""
+    session_id = request.cookies.get("session_id")
+    session = get_or_create_session(session_id)
+
+    try:
+        # Initialize ensemble if not already done
+        if not session.ensemble:
+            session.ensemble = EnsembleLLM(models=DEFAULT_MODELS, verbose_logging=False)
+
+        # Check if memory manager exists
+        if not session.ensemble.memory_manager:
+            raise HTTPException(status_code=500, detail="Memory manager not initialized")
+
+        body = await request.json()
+        query = body.get("query", "")
+        n_results = body.get("n_results", 5)
+        min_relevance = body.get("min_relevance", 0.3)
+
+        if not query:
+            raise HTTPException(status_code=400, detail="Query is required")
+
+        chunks = session.ensemble.memory_manager.semantic_memory.search_documents(
+            query=query,
+            n_results=n_results,
+            min_relevance=min_relevance,
+        )
+
+        return JSONResponse({"status": "success", "results": chunks})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching documents: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to search documents: {str(e)}"
+        )

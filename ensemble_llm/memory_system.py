@@ -29,6 +29,7 @@ class MemoryType(Enum):
     CONVERSATION = "conversation"
     INFERENCE = "inference"
     RELATIONSHIP = "relationship"
+    DOCUMENT = "document"
 
 
 @dataclass
@@ -180,6 +181,12 @@ class SemanticMemory:
             metadata={"description": "Conversation history"},
         )
 
+        self.documents_collection = self.chroma_client.get_or_create_collection(
+            name="documents",
+            embedding_function=self.embedding_function,
+            metadata={"description": "Uploaded document chunks"},
+        )
+
         # Initialize SQLite for structured data
         self.db_path = self.memory_dir / "memory.db"
         self.init_database()
@@ -234,6 +241,35 @@ class SemanticMemory:
                 summary TEXT,
                 key_topics TEXT,
                 timestamp DATETIME
+            )
+        """
+        )
+
+        # Documents table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS documents (
+                document_id TEXT PRIMARY KEY,
+                filename TEXT,
+                file_type TEXT,
+                total_pages INTEGER,
+                total_chunks INTEGER,
+                upload_date DATETIME,
+                metadata TEXT
+            )
+        """
+        )
+
+        # Document chunks table (for tracking individual chunks)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS document_chunks (
+                chunk_id TEXT PRIMARY KEY,
+                document_id TEXT,
+                chunk_index INTEGER,
+                content TEXT,
+                metadata TEXT,
+                FOREIGN KEY (document_id) REFERENCES documents(document_id)
             )
         """
         )
@@ -448,6 +484,206 @@ class SemanticMemory:
             logger.error(f"Error searching conversations: {e}")
             return []
 
+    def store_document(
+        self,
+        document_id: str,
+        filename: str,
+        file_type: str,
+        total_pages: int,
+        total_chunks: int,
+        chunks: List[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        Store a processed document with all its chunks
+
+        Args:
+            document_id: Unique document identifier
+            filename: Original filename
+            file_type: File extension (.pdf, .docx, etc.)
+            total_pages: Number of pages in document
+            total_chunks: Number of chunks created
+            chunks: List of chunk dictionaries with 'content' and 'metadata'
+            metadata: Additional document-level metadata
+
+        Returns:
+            Document ID
+        """
+        # Store document metadata in SQLite
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO documents
+            (document_id, filename, file_type, total_pages, total_chunks, upload_date, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                document_id,
+                filename,
+                file_type,
+                total_pages,
+                total_chunks,
+                datetime.now(),
+                json.dumps(metadata) if metadata else "{}",
+            ),
+        )
+
+        # Store each chunk
+        chunk_ids = []
+        for chunk in chunks:
+            chunk_id = f"{document_id}_chunk_{chunk['chunk_index']}"
+            chunk_content = chunk["content"]
+            chunk_metadata = chunk.get("metadata", {})
+
+            # Sanitize metadata for ChromaDB
+            safe_metadata = sanitize_metadata(chunk_metadata)
+
+            # Store in ChromaDB for semantic search
+            self.documents_collection.upsert(
+                ids=[chunk_id],
+                documents=[chunk_content],
+                metadatas=[safe_metadata],
+            )
+
+            # Store in SQLite for structured queries
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO document_chunks
+                (chunk_id, document_id, chunk_index, content, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            """,
+                (
+                    chunk_id,
+                    document_id,
+                    chunk["chunk_index"],
+                    chunk_content,
+                    json.dumps(chunk_metadata),
+                ),
+            )
+
+            chunk_ids.append(chunk_id)
+
+        conn.commit()
+        conn.close()
+
+        logger.info(
+            f"Stored document {filename}: {total_chunks} chunks, "
+            f"{total_pages} pages, ID: {document_id}"
+        )
+
+        return document_id
+
+    def search_documents(
+        self, query: str, n_results: int = 5, min_relevance: float = 0.3
+    ) -> List[Dict]:
+        """
+        Search document chunks using semantic similarity
+
+        Args:
+            query: Search query
+            n_results: Maximum number of results
+            min_relevance: Minimum relevance score (0-1)
+
+        Returns:
+            List of relevant document chunks with metadata
+        """
+        try:
+            results = self.documents_collection.query(
+                query_texts=[query], n_results=n_results
+            )
+
+            chunks = []
+            if results["metadatas"] and results["metadatas"][0]:
+                for metadata, document, distance in zip(
+                    results["metadatas"][0],
+                    results["documents"][0],
+                    results["distances"][0],
+                ):
+                    relevance = 1 - distance
+
+                    # Only return results above relevance threshold
+                    if relevance >= min_relevance:
+                        chunks.append(
+                            {
+                                "content": document,
+                                "metadata": metadata,
+                                "relevance": relevance,
+                            }
+                        )
+
+            return chunks
+
+        except Exception as e:
+            logger.error(f"Error searching documents: {e}")
+            return []
+
+    def get_all_documents(self) -> List[Dict]:
+        """Get list of all uploaded documents"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT document_id, filename, file_type, total_pages,
+                   total_chunks, upload_date, metadata
+            FROM documents
+            ORDER BY upload_date DESC
+        """
+        )
+
+        documents = []
+        for row in cursor.fetchall():
+            doc_id, filename, file_type, pages, chunks, upload_date, metadata = row
+            documents.append(
+                {
+                    "document_id": doc_id,
+                    "filename": filename,
+                    "file_type": file_type,
+                    "total_pages": pages,
+                    "total_chunks": chunks,
+                    "upload_date": upload_date,
+                    "metadata": json.loads(metadata) if metadata else {},
+                }
+            )
+
+        conn.close()
+        return documents
+
+    def delete_document(self, document_id: str) -> bool:
+        """Delete a document and all its chunks"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Get chunk IDs to delete from ChromaDB
+            cursor.execute(
+                "SELECT chunk_id FROM document_chunks WHERE document_id = ?",
+                (document_id,),
+            )
+            chunk_ids = [row[0] for row in cursor.fetchall()]
+
+            # Delete from ChromaDB
+            if chunk_ids:
+                self.documents_collection.delete(ids=chunk_ids)
+
+            # Delete from SQLite
+            cursor.execute(
+                "DELETE FROM document_chunks WHERE document_id = ?", (document_id,)
+            )
+            cursor.execute("DELETE FROM documents WHERE document_id = ?", (document_id,))
+
+            conn.commit()
+            conn.close()
+
+            logger.info(f"Deleted document {document_id} and {len(chunk_ids)} chunks")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error deleting document {document_id}: {e}")
+            return False
+
     def get_all_facts(self) -> Dict[str, str]:
         """Get all facts as a dictionary"""
 
@@ -465,7 +701,7 @@ class SemanticMemory:
         return facts
 
     def get_user_context(self, query: str) -> str:
-        """Get relevant user context for a query"""
+        """Get relevant user context for a query, including documents"""
 
         context_parts = []
 
@@ -482,6 +718,78 @@ class SemanticMemory:
 
             if fact_strs:
                 context_parts.append("Known facts about user:\n" + "\n".join(fact_strs))
+
+        # Check if query is asking about documents themselves (metadata queries)
+        query_lower = query.lower()
+        document_keywords = ['document', 'file', 'uploaded', 'pdf', 'docx', 'last uploaded', 'recent', 'latest']
+        is_document_metadata_query = any(keyword in query_lower for keyword in document_keywords)
+
+        # Get all documents
+        all_docs = self.get_all_documents()
+
+        # If asking about documents themselves, OR if there are only 1-2 documents (proactively include them)
+        should_include_doc_list = is_document_metadata_query or (len(all_docs) > 0 and len(all_docs) <= 2)
+
+        if should_include_doc_list and all_docs:
+            context_parts.append("\n=== UPLOADED DOCUMENTS ===")
+            for doc in all_docs[:5]:  # Show up to 5 most recent
+                context_parts.append(
+                    f"\n📄 {doc['filename']}"
+                    f"\n   - Uploaded: {doc['upload_date']}"
+                    f"\n   - Pages: {doc['total_pages']}, Chunks: {doc['total_chunks']}"
+                    f"\n   - Type: {doc['file_type']}"
+                )
+
+            # For summarization requests, include actual content from the most recent document
+            if 'summarize' in query_lower or 'summary' in query_lower or 'about' in query_lower:
+                latest_doc = all_docs[0]
+                doc_id = latest_doc['document_id']
+
+                # Get first few chunks to provide content for summarization
+                try:
+                    conn = sqlite3.connect(self.db_path)
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        SELECT content FROM document_chunks
+                        WHERE document_id = ?
+                        ORDER BY chunk_index
+                        LIMIT 5
+                        """,
+                        (doc_id,)
+                    )
+                    chunks_content = cursor.fetchall()
+                    conn.close()
+
+                    if chunks_content:
+                        context_parts.append(f"\n\n=== CONTENT FROM {latest_doc['filename']} ===")
+                        for idx, (content,) in enumerate(chunks_content, 1):
+                            preview = content[:500] if len(content) > 500 else content
+                            context_parts.append(f"\n[Section {idx}]\n{preview}")
+                            if len(content) > 500:
+                                context_parts.append("...")
+                except Exception as e:
+                    logger.error(f"Error fetching document content: {e}")
+
+        # Search relevant document chunks (semantic search)
+        doc_chunks = self.search_documents(query, n_results=5, min_relevance=0.3)
+
+        if doc_chunks and not is_document_metadata_query:  # Only show if not already showing full docs
+            context_parts.append("\nRelevant information from documents:")
+            for chunk in doc_chunks:
+                filename = chunk["metadata"].get("filename", "Unknown")
+                chunk_idx = chunk["metadata"].get("chunk_index", 0)
+                relevance = chunk.get("relevance", 0)
+
+                # Show snippet of content
+                content_preview = chunk["content"][:400]
+                if len(chunk["content"]) > 400:
+                    content_preview += "..."
+
+                context_parts.append(
+                    f"\n[From {filename}, section {chunk_idx + 1}, relevance: {relevance:.2f}]\n"
+                    f"{content_preview}"
+                )
 
         # Search relevant past conversations
         past_convs = self.search_conversations(query, n_results=2)

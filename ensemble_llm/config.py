@@ -600,3 +600,24 @@ SPEED_OPTIMIZED_MODELS = {
     "balanced": ["llama3.2:3b", "phi3.5:latest", "qwen2.5:7b"],
     "quality": DEFAULT_MODELS,
 }
+
+# Document Processing Configuration
+DOCUMENT_CONFIG = {
+    # Chunking settings
+    "chunk_size": 800,  # Target size in tokens (~4 chars per token)
+    "chunk_overlap": 200,  # Overlap between chunks in tokens
+    "min_chunk_size": 100,  # Minimum chunk size to avoid tiny fragments
+
+    # File upload limits
+    "max_file_size_mb": 50,  # Maximum file size in MB
+    "allowed_extensions": [".pdf", ".docx"],  # Supported file types
+
+    # Search settings
+    "default_search_results": 5,  # Number of chunks to retrieve
+    "min_relevance_threshold": 0.3,  # Minimum similarity score (0-1)
+    "context_chunks_per_query": 3,  # Number of chunks to include in context
+
+    # Memory integration
+    "auto_include_in_context": True,  # Automatically include document context in queries
+    "context_relevance_threshold": 0.4,  # Minimum relevance to include in context
+}

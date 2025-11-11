@@ -7,16 +7,28 @@ function ensembleApp() {
         reconnectAttempts: 0,
         maxReconnectAttempts: 5,
         reconnectDelay: 3000,
-        
+
         // UI State
         currentQuery: '',
         isProcessing: false,
         webSearch: false,
         speedMode: 'balanced',
-        
+
         // Data
         chatHistory: [],
         logs: [],
+
+        // Document Management
+        documents: [],
+        showDocumentsPanel: false,
+        uploadProgress: 0,
+        uploadingFileName: '',
+        uploadMessage: '',
+        uploadStatus: '', // 'success', 'error', or ''
+        dragOver: false,
+
+        // Toast Notifications
+        toasts: [],
         
         // Initialize the application
         async init() {
@@ -49,10 +61,13 @@ function ensembleApp() {
 
                 // Load memory stats
                 this.loadMemoryStats();
-                
+
+                // Load documents
+                await this.loadDocuments();
+
                 // Focus on input field
                 document.getElementById('query-input')?.focus();
-                
+
             } catch (error) {
                 console.error('Failed to initialize:', error);
                 this.showError('Failed to initialize application. Please refresh the page.');
@@ -327,6 +342,285 @@ function ensembleApp() {
                 }
             } catch (error) {
                 console.error('Failed to load memory stats:', error);
+            }
+        },
+
+        // ========================================
+        // Document Management Methods
+        // ========================================
+
+        toggleDocumentsPanel() {
+            this.showDocumentsPanel = !this.showDocumentsPanel;
+            if (this.showDocumentsPanel) {
+                this.loadDocuments();
+            }
+        },
+
+        async loadDocuments() {
+            try {
+                const response = await fetch('/api/documents', {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    console.warn('Documents endpoint returned error, initializing empty list');
+                    this.documents = [];
+                    return;
+                }
+
+                const data = await response.json();
+                this.documents = data.documents || [];
+                console.log(`Loaded ${this.documents.length} documents`);
+
+                // Show info if there was an error but it was handled
+                if (data.error) {
+                    console.warn('Document loading had issues:', data.error);
+                }
+            } catch (error) {
+                console.warn('Error loading documents, using empty list:', error);
+                this.documents = [];
+                // Don't show error toast on initial load - just log it
+            }
+        },
+
+        handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                this.uploadFile(file);
+            }
+            // Reset input so same file can be selected again
+            event.target.value = '';
+        },
+
+        handleFileDrop(event) {
+            this.dragOver = false;
+
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+
+                // Validate file type
+                const validTypes = ['.pdf', '.docx'];
+                const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+
+                if (!validTypes.includes(fileExt)) {
+                    this.showToast(`Invalid file type. Please upload PDF or DOCX files.`, 'error');
+                    return;
+                }
+
+                this.uploadFile(file);
+            }
+        },
+
+        async uploadFile(file) {
+            // Validate file size (50MB limit)
+            const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+            if (file.size > maxSize) {
+                this.uploadStatus = 'error';
+                this.uploadMessage = 'File too large. Maximum size is 50MB.';
+                this.showToast('File too large (max 50MB)', 'error');
+                return;
+            }
+
+            // Validate file type
+            const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+            const validExtensions = ['.pdf', '.docx'];
+            const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+
+            if (!validExtensions.includes(fileExt) && !validTypes.includes(file.type)) {
+                this.uploadStatus = 'error';
+                this.uploadMessage = 'Invalid file type. Please upload PDF or DOCX files only.';
+                this.showToast('Invalid file type', 'error');
+                return;
+            }
+
+            // Reset state
+            this.uploadProgress = 0;
+            this.uploadingFileName = file.name;
+            this.uploadMessage = '';
+            this.uploadStatus = '';
+
+            console.log(`Starting upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                // Create XMLHttpRequest for progress tracking
+                const xhr = new XMLHttpRequest();
+
+                // Track upload progress
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = Math.round((e.loaded / e.total) * 100);
+                        this.uploadProgress = percentComplete;
+                        console.log(`Upload progress: ${percentComplete}%`);
+                    }
+                });
+
+                // Handle completion
+                xhr.addEventListener('load', async () => {
+                    if (xhr.status === 200) {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+
+                            this.uploadProgress = 100;
+                            this.uploadStatus = 'success';
+                            this.uploadMessage = `Successfully uploaded ${file.name}! (${response.total_chunks} chunks, ${response.total_pages} pages)`;
+
+                            console.log('Upload successful:', response);
+                            this.showToast(`${file.name} uploaded successfully!`, 'success');
+
+                            // Reload documents
+                            await this.loadDocuments();
+
+                            // Clear status after 3 seconds
+                            setTimeout(() => {
+                                this.uploadProgress = 0;
+                                this.uploadMessage = '';
+                                this.uploadStatus = '';
+                                this.uploadingFileName = '';
+                            }, 3000);
+
+                        } catch (error) {
+                            console.error('Error parsing response:', error);
+                            this.handleUploadError('Failed to process server response');
+                        }
+                    } else {
+                        let errorMessage = 'Upload failed';
+                        try {
+                            const errorData = JSON.parse(xhr.responseText);
+                            errorMessage = errorData.detail || errorMessage;
+                        } catch (e) {
+                            // Use default error message
+                        }
+                        this.handleUploadError(errorMessage);
+                    }
+                });
+
+                // Handle errors
+                xhr.addEventListener('error', () => {
+                    this.handleUploadError('Network error during upload');
+                });
+
+                xhr.addEventListener('abort', () => {
+                    this.handleUploadError('Upload cancelled');
+                });
+
+                // Send request
+                xhr.open('POST', '/api/documents/upload');
+                xhr.send(formData);
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                this.handleUploadError(error.message || 'Upload failed');
+            }
+        },
+
+        handleUploadError(message) {
+            this.uploadProgress = 0;
+            this.uploadStatus = 'error';
+            this.uploadMessage = message;
+            this.showToast(message, 'error');
+
+            console.error('Upload error:', message);
+
+            // Clear error after 5 seconds
+            setTimeout(() => {
+                this.uploadMessage = '';
+                this.uploadStatus = '';
+                this.uploadingFileName = '';
+            }, 5000);
+        },
+
+        async deleteDocument(documentId) {
+            if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/documents/${documentId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete document');
+                }
+
+                this.showToast('Document deleted successfully', 'success');
+
+                // Reload documents
+                await this.loadDocuments();
+
+            } catch (error) {
+                console.error('Error deleting document:', error);
+                this.showToast('Failed to delete document', 'error');
+            }
+        },
+
+        async searchInDocument(doc) {
+            this.showDocumentsPanel = false;
+            this.currentQuery = `What does ${doc.filename} say about `;
+
+            // Focus on input
+            this.$nextTick(() => {
+                const input = document.querySelector('input[type="text"]');
+                if (input) {
+                    input.focus();
+                    // Move cursor to end
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }
+            });
+        },
+
+        // Toast Notification System
+        showToast(message, type = 'info', duration = 4000) {
+            const toast = {
+                message,
+                type, // 'success', 'error', 'info', 'warning'
+                show: true
+            };
+
+            this.toasts.push(toast);
+
+            // Auto-remove toast after duration
+            setTimeout(() => {
+                toast.show = false;
+                setTimeout(() => {
+                    const index = this.toasts.indexOf(toast);
+                    if (index > -1) {
+                        this.toasts.splice(index, 1);
+                    }
+                }, 300); // Wait for exit animation
+            }, duration);
+        },
+
+        // Utility: Format date for display
+        formatDate(dateString) {
+            if (!dateString) return 'Unknown';
+
+            try {
+                const date = new Date(dateString);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+
+                if (diffMins < 1) return 'Just now';
+                if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+                if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+
+                // For older dates, show formatted date
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            } catch (error) {
+                return dateString;
             }
         }
     };

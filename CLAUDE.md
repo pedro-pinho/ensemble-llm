@@ -27,24 +27,31 @@ Ensemble LLM is a multi-model local LLM system that runs multiple language model
    - `PrecomputeManager`: Precomputes common queries in background
    - `CacheManager`: Manages cache lifecycle and statistics
 
-4. **Performance Tracking** (`ensemble_llm/performance_tracker.py`): Adaptive model selection and rotation
+4. **Document Processing** (`ensemble_llm/document_processor.py`): PDF and DOCX document upload and processing
+   - `DocumentProcessor`: Extracts text from PDF/DOCX files and splits into chunks
+   - Intelligent chunking with configurable overlap for context continuity
+   - Integrates with memory system for long-term document storage
+   - Supports semantic search across uploaded documents
+
+5. **Performance Tracking** (`ensemble_llm/performance_tracker.py`): Adaptive model selection and rotation
    - Tracks success rates, response times, selection rates per model
    - `AdaptiveModelManager`: Dynamically swaps underperforming models
    - Uses rolling windows for recent performance evaluation
    - Logs detailed metrics when verbose logging enabled
 
-5. **Fast Mode** (`ensemble_llm/fast_mode.py`): Speed optimization strategies
+6. **Fast Mode** (`ensemble_llm/fast_mode.py`): Speed optimization strategies
    - Race strategy: Returns first N responses
    - Cascade strategy: Starts fast models first, adds more if needed
    - Single best: Uses only highest-performing model
    - `TurboMode` and `ModelWarmup` for performance optimization
 
-6. **Web Server** (`ensemble_llm/web_server.py`): FastAPI + WebSocket interface for web GUI
+7. **Web Server** (`ensemble_llm/web_server.py`): FastAPI + WebSocket interface for web GUI
    - Session management with chat history
    - Real-time query processing via WebSockets
+   - Document upload endpoints (/api/documents/upload, /api/documents, etc.)
    - Serves static files from `ensemble_llm/static/`
 
-7. **Configuration** (`ensemble_llm/config.py`): Centralized configuration with platform-specific settings
+8. **Configuration** (`ensemble_llm/config.py`): Centralized configuration with platform-specific settings
    - Platform detection (macOS/Windows/Linux) with optimized defaults
    - Model pools organized by specialty (code, math, creative)
    - Speed profiles (turbo/fast/balanced/quality)
@@ -70,6 +77,8 @@ Ensemble LLM is a multi-model local LLM system that runs multiple language model
 - Uses semantic search to find relevant past interactions
 - All metadata stored in ChromaDB must be primitives (use `sanitize_metadata()`)
 - Memory storage path: `memory_store/` directory
+- Automatically includes relevant document chunks in query context
+- Documents stored with `MemoryType.DOCUMENT` for semantic retrieval
 
 ### Platform-Specific Behavior
 - Windows: Uses high process priority, GPU layer optimization, VRAM-based model selection
@@ -104,9 +113,12 @@ python -m ensemble_llm.main --speed fast "Question"
 # Custom models
 python -m ensemble_llm.main --models llama3.2:3b phi3.5 "Question"
 
-# Web GUI
+# Web GUI (includes document upload interface)
 python run_web_gui.py
 # Then open http://localhost:8000
+
+# Upload documents via web GUI or API
+# See docs/DOCUMENT_UPLOAD.md for detailed guide
 ```
 
 ### Setup and Installation
@@ -123,6 +135,9 @@ scripts\setup_windows.bat
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+# Document processing dependencies (for PDF/DOCX upload)
+pip install PyPDF2 pdfplumber python-docx
 
 # Pull Ollama models
 ollama pull llama3.2:3b
@@ -190,6 +205,7 @@ There are no unit tests in this repository yet. When adding tests:
 - Platform-specific settings use `IS_WINDOWS`, `IS_MACOS`, `IS_LINUX` flags
 - Speed profiles defined in `SPEED_PROFILES` - map to model sets and strategies
 - Logging levels controlled via `LOGGING_CONFIG`
+- Document processing settings in `DOCUMENT_CONFIG` (chunk size, file limits, etc.)
 
 ### Council Mode (Model Awareness)
 - Council mode makes models aware they're part of an ensemble
@@ -249,8 +265,9 @@ There are no unit tests in this repository yet. When adding tests:
 
 - `cache/` - Query cache and precomputed results
 - `data/` - Performance tracking data
+- `docs/` - Documentation including DOCUMENT_UPLOAD.md
 - `logs/` - Application logs with timestamps
-- `memory_store/` - ChromaDB persistent memory storage
+- `memory_store/` - ChromaDB persistent memory storage (includes uploaded documents)
 - `smart_data/` - Learning system data (patterns, statistics)
 - `specialization_data/` - Model specialization metrics
 
@@ -266,6 +283,72 @@ Core dependencies (see requirements.txt):
 - `numpy` - Numerical operations for scoring
 - `sqlalchemy` - Database operations for memory system
 - `psutil` - System resource monitoring
+- `PyPDF2` + `pdfplumber` - PDF document processing
+- `python-docx` - DOCX document processing
+
+## Document Upload Feature
+
+### Overview
+The document upload feature allows users to upload PDF and DOCX files, which are:
+1. Extracted and cleaned
+2. Split into overlapping chunks for better context
+3. Stored in ChromaDB with semantic embeddings
+4. Automatically retrieved when relevant to user queries
+5. Persisted for long-term memory (months/years)
+
+### Key Files
+- `ensemble_llm/document_processor.py` - Document extraction and chunking
+- `ensemble_llm/memory_system.py` - Document storage methods (store_document, search_documents, etc.)
+- `ensemble_llm/web_server.py` - Upload endpoints
+- `ensemble_llm/config.py` - DOCUMENT_CONFIG settings
+- `docs/DOCUMENT_UPLOAD.md` - Complete user guide
+
+### Usage Example
+```python
+# Via API
+POST /api/documents/upload
+# Upload PDF/DOCX file
+
+# Via Memory System
+from ensemble_llm.document_processor import DocumentProcessor
+from ensemble_llm.memory_system import SemanticMemory
+
+processor = DocumentProcessor(chunk_size=800, chunk_overlap=200)
+memory = SemanticMemory()
+
+# Process document
+processed = processor.process_document(Path("report.pdf"))
+
+# Store chunks
+memory.store_document(
+    document_id=processed.document_id,
+    filename=processed.filename,
+    file_type=processed.file_type,
+    total_pages=processed.total_pages,
+    total_chunks=processed.total_chunks,
+    chunks=[chunk.to_dict() for chunk in processed.chunks]
+)
+
+# Later, queries automatically retrieve relevant chunks
+results = memory.search_documents("machine learning", n_results=5)
+```
+
+### Integration with Main Query Pipeline
+- Document chunks are automatically included in `get_user_context()`
+- When a user asks a question, the memory system:
+  1. Searches for relevant document chunks (semantic similarity)
+  2. Filters by relevance threshold (default 0.4)
+  3. Includes top 3 chunks in the context sent to LLMs
+  4. LLMs receive both the question and relevant document excerpts
+
+### Important Notes
+- Documents are chunked at ~800 tokens with 200 token overlap
+- Chunk overlap ensures context continuity across splits
+- All metadata must be sanitized before ChromaDB storage
+- File uploads limited to 50MB by default (configurable)
+- Supported formats: PDF (via PyPDF2/pdfplumber), DOCX (via python-docx)
+
+For complete documentation, see `docs/DOCUMENT_UPLOAD.md`
 
 ## Known Issues
 
@@ -273,3 +356,4 @@ Core dependencies (see requirements.txt):
 - Windows requires Ollama to be manually started before use
 - Large models (13B+) may exceed memory on systems with <32GB RAM
 - Web search depends on external search APIs (may have rate limits)
+- PDF extraction quality depends on source (selectable text vs scanned images)
