@@ -629,13 +629,10 @@ class EnsembleLLM:
             web_context = await self.web_searcher.search_with_fallback(prompt)
 
             if web_context and web_context != "No web search results found.":
-                enhanced_prompt = f"""Context from web search:
-                    {web_context}
+                # Optimized compact format
+                enhanced_prompt = f"""[Context] {web_context}
 
-                    Based on the above context and your knowledge, please answer the following question.
-                    If the web search results don't contain relevant information, use your general knowledge.
-
-                    Question: {prompt}"""
+Q: {prompt}"""
                 return enhanced_prompt, True
 
         except Exception as e:
@@ -1848,8 +1845,15 @@ async def main():
             print("   'exit' or 'quit' - Exit the program")
             print("   'status' - Show model performance statistics")
             print("   'models' - List current active models")
+            print("   'speed' - Change speed mode (turbo/fast/balanced/quality)")
+            print("   'retry' - Retry last query with different speed")
             print("   'help' - Show this help message")
+            print(f"\nCurrent speed mode: {ensemble.speed_mode}")
             print(f"\nEnter your questions below:\n")
+
+            # Track last query for retry
+            last_query = None
+            last_error = None
 
             while True:
                 try:
@@ -1866,6 +1870,8 @@ async def main():
                         print(f"\nAvailable commands:")
                         print("   'status' - Show model performance")
                         print("   'models' - List active models")
+                        print("   'speed' - Change speed mode")
+                        print("   'retry' - Retry last query with different speed")
                         print("   'exit' - Quit the program")
                         continue
 
@@ -1886,6 +1892,79 @@ async def main():
                             desc = model_config.get("description", "")
                             print(f"   {i}. {model} - {desc}")
                         continue
+
+                    if prompt.lower() == "speed":
+                        print(f"\nCurrent speed mode: {ensemble.speed_mode}")
+                        print("\nAvailable speed modes:")
+                        print("   1. turbo   - Ultra-fast (2 models, 10s timeout)")
+                        print("   2. fast    - Fast (3 models, 15s timeout)")
+                        print("   3. balanced - Balanced (4 models, 25s timeout)")
+                        print("   4. quality  - Quality (5 models, 40s timeout)")
+
+                        speed_choice = input("\nEnter number or name: ").strip().lower()
+                        speed_map = {
+                            "1": "turbo", "turbo": "turbo",
+                            "2": "fast", "fast": "fast",
+                            "3": "balanced", "balanced": "balanced",
+                            "4": "quality", "quality": "quality"
+                        }
+
+                        if speed_choice in speed_map:
+                            new_speed = speed_map[speed_choice]
+                            ensemble.speed_mode = new_speed
+                            ensemble.speed_profile = SPEED_PROFILES.get(new_speed, SPEED_PROFILES["balanced"])
+                            print(f"✓ Speed mode changed to: {new_speed}")
+                        else:
+                            print("Invalid choice. Speed mode unchanged.")
+                        continue
+
+                    if prompt.lower() == "retry":
+                        if not last_query:
+                            print("\nNo previous query to retry.")
+                            continue
+
+                        print(f"\nRetrying last query: \"{last_query}\"")
+                        print(f"Current speed mode: {ensemble.speed_mode}")
+                        print("\nOptions:")
+                        print("   1. Retry with current speed ({})".format(ensemble.speed_mode))
+                        print("   2. Change speed mode first")
+                        print("   3. Cancel")
+
+                        retry_choice = input("\nChoice: ").strip()
+
+                        if retry_choice == "1":
+                            prompt = last_query
+                        elif retry_choice == "2":
+                            print("\nAvailable speed modes:")
+                            print("   1. turbo   - Ultra-fast (2 models, 10s timeout)")
+                            print("   2. fast    - Fast (3 models, 15s timeout)")
+                            print("   3. balanced - Balanced (4 models, 25s timeout)")
+                            print("   4. quality  - Quality (5 models, 40s timeout)")
+
+                            speed_choice = input("\nEnter number or name: ").strip().lower()
+                            speed_map = {
+                                "1": "turbo", "turbo": "turbo",
+                                "2": "fast", "fast": "fast",
+                                "3": "balanced", "balanced": "balanced",
+                                "4": "quality", "quality": "quality"
+                            }
+
+                            if speed_choice in speed_map:
+                                new_speed = speed_map[speed_choice]
+                                ensemble.speed_mode = new_speed
+                                ensemble.speed_profile = SPEED_PROFILES.get(new_speed, SPEED_PROFILES["balanced"])
+                                print(f"✓ Speed mode changed to: {new_speed}")
+                                prompt = last_query
+                            else:
+                                print("Invalid choice. Retry cancelled.")
+                                continue
+                        else:
+                            print("Retry cancelled.")
+                            continue
+
+                    # Store query for potential retry
+                    last_query = prompt
+                    last_error = None
 
                     # Process the query
                     print("")  # Empty line for better readability
@@ -1919,11 +1998,64 @@ async def main():
                         print(f"\nGoodbye!")
                         break
                 except Exception as e:
+                    last_error = str(e)
+                    error_lower = last_error.lower()
+
+                    # Check if it's a timeout error
+                    is_timeout = "timeout" in error_lower or "timed out" in error_lower
+
                     if FEATURES["verbose_errors"]:
                         logger.error(f"Error in interactive mode: {str(e)}")
                         logger.debug(traceback.format_exc())
-                    print(f"\nError: {str(e)}")
-                    print("Please try again or type 'exit' to quit.")
+
+                    print(f"\n❌ Error: {str(e)}")
+
+                    # Offer retry options for timeout errors
+                    if is_timeout and last_query:
+                        print("\n💡 Timeout detected! Quick retry options:")
+                        print(f"   Current mode: {ensemble.speed_mode}")
+
+                        # Suggest faster mode
+                        speed_order = ["quality", "balanced", "fast", "turbo"]
+                        current_idx = speed_order.index(ensemble.speed_mode) if ensemble.speed_mode in speed_order else 1
+
+                        if current_idx < len(speed_order) - 1:
+                            faster_mode = speed_order[current_idx + 1]
+                            profile = SPEED_PROFILES[faster_mode]
+                            print(f"\n   ⚡ Suggested: '{faster_mode}' mode")
+                            print(f"      ({profile['max_models']} models, {profile['timeout']}s timeout)")
+
+                            retry_now = input(f"\nRetry with '{faster_mode}' mode? (y/n/other): ").strip().lower()
+
+                            if retry_now == "y":
+                                ensemble.speed_mode = faster_mode
+                                ensemble.speed_profile = SPEED_PROFILES[faster_mode]
+                                print(f"✓ Switched to {faster_mode} mode. Retrying...\n")
+
+                                try:
+                                    response, metadata = await ensemble.ensemble_query(last_query, args.verbose)
+
+                                    selected = metadata.get("selected_model", "ensemble")
+                                    web_indicator = f"[WEB]" if metadata.get("used_web_search", False) else ""
+
+                                    print(f"\n{web_indicator}Answer (via {selected}):")
+                                    print("-" * 40)
+                                    print(response)
+                                    print("-" * 40)
+
+                                    if DISPLAY_CONFIG["show_timestamps"]:
+                                        print(f"Response time: {metadata.get('total_ensemble_time', 0):.1f}s")
+
+                                    continue
+                                except Exception as retry_e:
+                                    print(f"\n❌ Retry also failed: {str(retry_e)}")
+                            elif retry_now == "other":
+                                print("\nType 'retry' to manually select a speed mode.")
+                        else:
+                            print("\n   Already at fastest mode (turbo).")
+                            print("   Type 'retry' to try again or change settings.")
+                    else:
+                        print("Please try again or type 'exit' to quit.")
 
         else:
             # Single query mode

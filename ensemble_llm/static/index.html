@@ -183,8 +183,10 @@
                                 <div class="text-sm text-gray-200 whitespace-pre-wrap" 
                                      x-text="message.response"></div>
                                 <div class="text-xs text-gray-400 mt-2">
-                                    <span x-text="message.metadata.selected_model"></span> •
-                                    <span x-text="`${message.metadata.total_ensemble_time?.toFixed(1)}s`"></span>
+                                    <span x-text="message.metadata.selected_model"></span>
+                                    <template x-if="message.metadata.total_time">
+                                        <span> • <span x-text="`${message.metadata.total_time.toFixed(1)}s`"></span></span>
+                                    </template>
                                 </div>
                             </div>
                         </div>

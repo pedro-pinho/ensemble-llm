@@ -16,6 +16,8 @@ from chromadb.utils import embedding_functions
 import sqlite3
 from sentence_transformers import SentenceTransformer
 
+from .config import MEMORY_CONFIG
+
 warnings.filterwarnings("ignore", category=UserWarning, message=".*urllib3 v2.*")
 
 logger = logging.getLogger("EnsembleLLM.Memory")
@@ -298,6 +300,7 @@ class SemanticMemory:
         value: str,
         confidence: float = 1.0,
         source: str = "user",
+        skip_inference: bool = False,
     ) -> str:
         """Store a fact with automatic inference generation"""
 
@@ -326,7 +329,7 @@ class SemanticMemory:
 
         cursor.execute(
             """
-            INSERT OR REPLACE INTO facts 
+            INSERT OR REPLACE INTO facts
             (id, category, key, value, confidence, source, timestamp, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
@@ -345,8 +348,9 @@ class SemanticMemory:
         conn.commit()
         conn.close()
 
-        # Generate inferences
-        self._generate_inferences({f"{category}_{key}": value})
+        # Generate inferences (only for user-provided facts, not inferred ones)
+        if not skip_inference and source != "inference":
+            self._generate_inferences({f"{category}_{key}": value})
 
         logger.info(
             f"Stored fact: {category}:{key} = {value[:100] if len(value) > 100 else value}"
@@ -700,8 +704,128 @@ class SemanticMemory:
         conn.close()
         return facts
 
+    def _count_tokens(self, text: str) -> int:
+        """Rough token count estimation (1 token ≈ 4 chars)"""
+        return len(text) // 4
+
     def get_user_context(self, query: str) -> str:
         """Get relevant user context for a query, including documents"""
+
+        if not MEMORY_CONFIG.get("optimize_context", True):
+            # Legacy verbose format
+            return self._get_user_context_legacy(query)
+
+        # Optimized format
+        return self._get_user_context_optimized(query)
+
+    def _get_user_context_optimized(self, query: str) -> str:
+        """Optimized memory context with token limits and relevance filtering"""
+
+        context_parts = []
+        current_tokens = 0
+        max_tokens = MEMORY_CONFIG.get("max_context_tokens", 150)
+        max_preview = MEMORY_CONFIG.get("max_content_preview", 200)
+
+        # Search relevant facts (strict relevance filter)
+        max_facts = MEMORY_CONFIG.get("max_facts", 3)
+        min_fact_relevance = MEMORY_CONFIG.get("min_fact_relevance", 0.6)
+
+        relevant_facts = self.search_facts(query, n_results=max_facts)
+        filtered_facts = [
+            f for f in relevant_facts
+            if f.get("relevance", 0) >= min_fact_relevance
+        ]
+
+        if filtered_facts:
+            # Compact format: "Facts: key1=val1, key2=val2"
+            fact_items = []
+            for fact in filtered_facts[:max_facts]:
+                key = fact.get('key', 'fact')
+                value = fact.get('value', 'unknown')
+                # Truncate long values
+                if len(value) > 50:
+                    value = value[:47] + "..."
+                fact_items.append(f"{key}={value}")
+
+            fact_str = "Facts: " + ", ".join(fact_items)
+            fact_tokens = self._count_tokens(fact_str)
+
+            if current_tokens + fact_tokens <= max_tokens:
+                context_parts.append(fact_str)
+                current_tokens += fact_tokens
+
+        # Search relevant document chunks (if not over budget)
+        if current_tokens < max_tokens * 0.8:  # Reserve 20% for potential conversations
+            max_docs = MEMORY_CONFIG.get("max_documents", 2)
+            min_doc_relevance = MEMORY_CONFIG.get("min_document_relevance", 0.4)
+
+            doc_chunks = self.search_documents(query, n_results=max_docs, min_relevance=min_doc_relevance)
+
+            if doc_chunks:
+                # Compact format: "Docs: [file1] content... | [file2] content..."
+                doc_items = []
+                for chunk in doc_chunks[:max_docs]:
+                    filename = chunk["metadata"].get("filename", "Doc")
+                    # Shorten filename
+                    if len(filename) > 20:
+                        filename = filename[:17] + "..."
+
+                    content = chunk["content"][:max_preview]
+                    if len(chunk["content"]) > max_preview:
+                        content += "..."
+
+                    doc_items.append(f"[{filename}] {content}")
+
+                doc_str = "Docs: " + " | ".join(doc_items)
+                doc_tokens = self._count_tokens(doc_str)
+
+                # Only add if within budget
+                if current_tokens + doc_tokens <= max_tokens:
+                    context_parts.append(doc_str)
+                    current_tokens += doc_tokens
+                elif current_tokens < max_tokens * 0.5:
+                    # Truncate to fit budget
+                    available = (max_tokens - current_tokens) * 4  # chars
+                    doc_str_truncated = doc_str[:available] + "..."
+                    context_parts.append(doc_str_truncated)
+                    current_tokens = max_tokens
+
+        # Search relevant past conversations (if budget allows)
+        if current_tokens < max_tokens * 0.9:  # Only if we have room
+            max_convs = MEMORY_CONFIG.get("max_conversations", 1)
+            min_conv_relevance = MEMORY_CONFIG.get("min_conversation_relevance", 0.5)
+            recent_days = MEMORY_CONFIG.get("recent_conversation_days", 7)
+
+            past_convs = self.search_conversations(query, n_results=max_convs)
+
+            for conv in past_convs:
+                timestamp = conv["metadata"].get("timestamp", "")
+                if timestamp:
+                    try:
+                        timestamp_dt = datetime.fromisoformat(timestamp)
+                        days_ago = (datetime.now() - timestamp_dt).days
+
+                        if days_ago < recent_days:
+                            query_preview = conv["metadata"].get("query", "")[:80]
+                            if query_preview:
+                                conv_str = f"Prev: {query_preview}..."
+                                conv_tokens = self._count_tokens(conv_str)
+
+                                if current_tokens + conv_tokens <= max_tokens:
+                                    context_parts.append(conv_str)
+                                    current_tokens += conv_tokens
+                    except:
+                        pass
+
+        result = " | ".join(context_parts) if context_parts else ""
+
+        if result:
+            logger.info(f"Memory context: ~{current_tokens} tokens")
+
+        return result
+
+    def _get_user_context_legacy(self, query: str) -> str:
+        """Legacy verbose format (for backward compatibility)"""
 
         context_parts = []
 
@@ -955,7 +1079,12 @@ class MemoryManager:
         context = self.semantic_memory.get_user_context(prompt)
 
         if context:
-            enhanced_prompt = f"""User Context:
+            if MEMORY_CONFIG.get("compact_formatting", True):
+                # Optimized compact format
+                enhanced_prompt = f"[Memory] {context}\n\nQ: {prompt}"
+            else:
+                # Legacy verbose format
+                enhanced_prompt = f"""User Context:
 {context}
 
 Current Query: {prompt}

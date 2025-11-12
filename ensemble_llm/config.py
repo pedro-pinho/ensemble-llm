@@ -193,6 +193,13 @@ WEB_SEARCH_CONFIG = {
     "search_engines": ["duckduckgo"],  # Can add more later
     "cache_ttl": 300,  # 5 minutes
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+
+    # Context optimization settings
+    "optimize_context": True,  # Enable token-efficient context
+    "max_snippet_sentences": 2,  # Maximum sentences per result
+    "min_relevance_score": 0.3,  # Minimum relevance to include (0-1)
+    "include_urls": False,  # URLs don't help LLMs and waste tokens
+    "max_context_tokens": 120,  # Target maximum context size
 }
 
 # Ensemble configuration
@@ -472,52 +479,18 @@ COUNCIL_CONFIG = {
     "synthesis_mode": True,  # After voting, winning model synthesizes all responses
     "filter_ai_meta_talk": True,  # Remove AI self-references from final output
 
-    "system_prompt_template": """INTERNAL SYSTEM MESSAGE (not visible to user):
+    "system_prompt_template": """[Council] You: {model_name} ({model_specialty})
+Members: {council_members} ({total_models} total)
+Task: Internal analysis - other models also responding. User question:""",
 
-You are {model_name}, an AI model. You are part of an AI council consisting of {total_models} models: {council_members}
+    "synthesis_prompt_template": """[Synthesis] Question: {question}
 
-Your specialty: {model_specialty}
-
-IMPORTANT DISTINCTIONS:
-- YOU are an AI model, part of the council (internal discussion)
-- The USER is a human asking a question (external, does not see this council process)
-- This message is ONLY for you and other AI models - the user does NOT see this
-
-Your task: Provide your best technical analysis for the internal council discussion. Focus on the substance of the answer. Other AI models in the council will also contribute their perspectives.
-
-Now, here is the USER'S QUESTION:""",
-
-    "synthesis_prompt_template": """INTERNAL SYSTEM MESSAGE - SYNTHESIS TASK:
-
-You were selected by the council voting system to create the final response for the USER.
-
-The user asked: {question}
-
-Here are the INTERNAL responses from other AI models in the council:
-
+Council responses:
 {all_responses}
 
-CRITICAL INSTRUCTIONS FOR SYNTHESIS:
-1. The user is a HUMAN - they do NOT know about this AI council
-2. Synthesize the best insights into ONE direct answer
-3. Write as if answering directly - NO phrases like:
-   "As an AI"
-   "I don't have access to"
-   "As a language model"
-   "The council discussed"
-   "Based on my training"
-   "I cannot"
-   Any mention of being AI or the council process
+Create ONE direct answer combining best insights. Avoid: "as an AI", "I don't have access", "council", "my training", "I cannot". Write as expert.
 
-4. Instead, write DIRECT, AUTHORITATIVE answers:
-   State facts and information directly
-   If something is unknown, say "This information is not available" (not "I don't have")
-   Provide value and insights, not disclaimers
-   Write like a knowledgeable expert explaining to a human
-
-5. Combine the SUBSTANCE from all responses - ignore any AI meta-talk from council members
-
-FINAL ANSWER FOR THE USER (direct, no AI self-references):""",
+Answer:""",
 
     "include_model_specialties": True,  # Include each model's specialty in prompt
     "iterative_rounds": 2,  # For iterative mode: number of discussion rounds
@@ -620,4 +593,19 @@ DOCUMENT_CONFIG = {
     # Memory integration
     "auto_include_in_context": True,  # Automatically include document context in queries
     "context_relevance_threshold": 0.4,  # Minimum relevance to include in context
+}
+
+# Memory Context Optimization Configuration
+MEMORY_CONFIG = {
+    "optimize_context": True,  # Enable token-efficient memory context
+    "max_context_tokens": 150,  # Maximum tokens for memory context
+    "max_facts": 3,  # Maximum facts to include
+    "max_conversations": 1,  # Maximum past conversations to include
+    "max_documents": 2,  # Maximum document chunks to include
+    "min_fact_relevance": 0.6,  # Minimum relevance score for facts (0-1)
+    "min_conversation_relevance": 0.5,  # Minimum for conversations
+    "min_document_relevance": 0.4,  # Minimum for document chunks
+    "max_content_preview": 200,  # Max characters per memory item
+    "recent_conversation_days": 7,  # Only include conversations from last N days
+    "compact_formatting": True,  # Use compact bullet-point format
 }
